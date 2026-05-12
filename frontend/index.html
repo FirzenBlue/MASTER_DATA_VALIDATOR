@@ -1,0 +1,3289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Master Data Validator</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ["Inter","system-ui","sans-serif"],
+        mono: ["'JetBrains Mono'","monospace"],
+      },
+    },
+  },
+};
+</script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.5/cdn.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="/static/css/main.css?v=45"/>
+</head>
+<body :class="env !== 'production' ? 'env-nonprod' : ''">
+
+<div x-data="app()" x-init="init()" x-cloak>
+
+  <!-- ENVIRONMENT BANNER — visible only for non-production environments.
+       Fixed to the top so it's always in view even when scrolled. Colored
+       yellow-orange for staging; orange for anything else non-prod. Clicking
+       the "Dismiss" link hides it for the current session (useful when
+       working on something and tired of seeing it, but reappears on reload). -->
+  <div x-show="env !== 'production' && !envBannerDismissed"
+       class="env-banner"
+       :class="env === 'staging' ? 'env-banner-staging' : 'env-banner-other'"
+       style="display:none">
+    <span class="env-banner-icon">⚠</span>
+    <span class="env-banner-text">
+      <strong x-text="env.toUpperCase()"></strong> environment ·
+      test changes here before promoting to production ·
+      <span class="text-opacity-80">not real customer work</span>
+    </span>
+    <button @click="envBannerDismissed = true" class="env-banner-dismiss"
+            title="Hide banner (reappears on next page load)">Dismiss</button>
+  </div>
+
+  <!-- Top-of-page progress bar — appears for any in-flight request -->
+  <div x-show="busyCount > 0" class="top-loader" style="display:none"></div>
+
+  <!-- ═══ LOGIN PAGE ═══ -->
+  <div x-show="!user" class="login-page animate-fade-in">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-brand">
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-600 to-blue-900 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+            </svg>
+          </div>
+          <div class="text-left">
+            <div class="login-title">Master Data Validator</div>
+            <div class="login-subtitle">SAP S/4HANA · LTMC pre-upload toolchain</div>
+          </div>
+        </div>
+      </div>
+      <div class="login-body">
+        <form @submit.prevent="doLogin()" class="space-y-3">
+          <div>
+            <label class="field-label">Username</label>
+            <input x-model="login.username" type="text" class="ff" autocomplete="username" required autofocus/>
+          </div>
+          <div>
+            <label class="field-label">Password</label>
+            <input x-model="login.password" type="password" class="ff" autocomplete="current-password" required/>
+          </div>
+          <div x-show="login.error" class="text-xs text-danger" x-text="login.error"></div>
+          <button type="submit" class="btn btn-primary w-full justify-center py-2" :disabled="login.loading">
+            <span x-show="!login.loading">Sign in</span>
+            <span x-show="login.loading">Signing in…</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ APP SHELL ═══ -->
+  <div x-show="user" class="app-shell animate-fade-in">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar flex flex-col">
+
+      <!-- Logo -->
+      <div class="sidebar-logo">
+        <div class="w-7 h-7 rounded-md bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+          </svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-white font-semibold text-[13px] leading-tight">Master Data</div>
+          <div class="text-slate-400 text-[10px] leading-tight uppercase tracking-wider">Validator</div>
+        </div>
+      </div>
+
+      <!-- Nav -->
+      <nav class="flex-1 overflow-y-auto py-2">
+        <div class="sidebar-section">Workspace</div>
+        <a @click="setView('repository')" class="sidebar-item" :class="view === 'repository' ? 'active' : ''">
+          <i data-lucide="folder" class="w-4 h-4"></i>
+          <span>Repository</span>
+          <span class="badge" x-text="moduleFileTotal()"></span>
+        </a>
+
+        <template x-if="session.loaded">
+          <div>
+            <a @click="setView('dashboard')" class="sidebar-item" :class="view === 'dashboard' ? 'active' : ''">
+              <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+              <span>Dashboard</span>
+            </a>
+            <a @click="setView('decisions')" class="sidebar-item" :class="view === 'decisions' ? 'active' : ''">
+              <i data-lucide="git-merge" class="w-4 h-4"></i>
+              <span>Decisions</span>
+              <span class="badge" x-show="dashboard.pending_decisions" x-text="dashboard.pending_decisions"></span>
+            </a>
+            <a @click="setView('records')" class="sidebar-item" :class="view === 'records' ? 'active' : ''">
+              <i data-lucide="file-text" class="w-4 h-4"></i>
+              <span>Records</span>
+            </a>
+            <a @click="setView('grid')" class="sidebar-item" :class="view === 'grid' ? 'active' : ''">
+              <i data-lucide="table" class="w-4 h-4"></i>
+              <span>Error Grid</span>
+              <span class="badge" x-show="dashboard.pending_errors" x-text="dashboard.pending_errors"></span>
+            </a>
+            <a @click="setView('export')" class="sidebar-item" :class="view === 'export' ? 'active' : ''">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              <span>Export</span>
+            </a>
+          </div>
+        </template>
+
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">Modules</div>
+        <template x-for="m in modules" :key="m.code">
+          <div class="sidebar-item" :class="m.accessible ? '' : 'disabled'" @click="m.accessible && filterByModule(m.code)">
+            <i data-lucide="box" class="w-4 h-4"></i>
+            <span x-text="m.code"></span>
+            <span class="badge" x-show="m.accessible && m.file_count" x-text="m.file_count"></span>
+            <i x-show="!m.accessible" data-lucide="lock" class="w-3 h-3 ml-auto"></i>
+          </div>
+        </template>
+
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">Help</div>
+        <a @click="setView('docs')" class="sidebar-item" :class="view === 'docs' ? 'active' : ''">
+          <i data-lucide="book-open" class="w-4 h-4"></i>
+          <span>Documentation</span>
+        </a>
+
+        <template x-if="user && (user.role === 'admin' || user.role === 'it')">
+          <div>
+            <div class="sidebar-divider"></div>
+            <div class="sidebar-section" x-text="user.role === 'admin' ? 'Admin' : 'IT'"></div>
+            <a @click="setView('admin_users')" class="sidebar-item"
+               x-show="user.role === 'admin'"
+               :class="view === 'admin_users' ? 'active' : ''">
+              <i data-lucide="users" class="w-4 h-4"></i>
+              <span>Users</span>
+            </a>
+            <a @click="setView('admin_audit')" class="sidebar-item" :class="view === 'admin_audit' ? 'active' : ''">
+              <i data-lucide="scroll-text" class="w-4 h-4"></i>
+              <span>Audit Trail</span>
+            </a>
+          </div>
+        </template>
+      </nav>
+      <!-- User chip moved to top-right of main content (see .user-topbar) -->
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="content flex-1">
+
+      <!-- ═══ TOP-RIGHT USER CHIP ═══
+           Standard SaaS pattern (Gmail, GitHub, Slack) — user identity
+           and sign-out live in the top-right corner, always accessible.
+           Click the chip to open a small dropdown with Sign out. -->
+      <div class="user-topbar" x-show="user" x-data="{ open: false }" @click.outside="open = false">
+        <button type="button" class="user-topbar-chip" @click="open = !open">
+          <div class="user-avatar-sm" x-text="user?.display_name?.substring(0,2)?.toUpperCase()"></div>
+          <div class="user-topbar-meta">
+            <div class="user-topbar-name" x-text="user?.display_name"></div>
+            <div class="user-topbar-role">
+              <span x-text="user?.role"></span>
+              <span x-show="user?.module" x-text="' · ' + user.module"></span>
+            </div>
+          </div>
+          <i :data-lucide="open ? 'chevron-up' : 'chevron-down'" class="w-3.5 h-3.5 text-muted"></i>
+        </button>
+        <div x-show="open" x-transition class="user-topbar-menu">
+          <div class="user-topbar-menu-header">
+            <div class="font-semibold text-ink" x-text="user?.display_name"></div>
+            <div class="text-xs text-muted" x-text="user?.username"></div>
+          </div>
+          <button type="button" class="user-topbar-menu-item" @click="open = false; doLogout()">
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+            Sign out
+          </button>
+        </div>
+      </div>
+
+      <!-- ─── REPOSITORY VIEW ─── -->
+      <section x-show="view === 'repository'" class="animate-fade-in">
+        <div class="content-header">
+          <div>
+            <h1 class="page-title">Repository</h1>
+            <p class="page-subtitle" x-text="user?.role === 'module' ? ('Files for ' + user.module + ' module') : 'All files across modules'"></p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select x-model="filters.status" @change="loadRepo()" class="ff" style="width:160px">
+              <option value="">All statuses</option>
+              <option value="in_progress">In Progress</option>
+              <option value="validated">Validated</option>
+              <option value="ltmc_uploaded">LTMC Uploaded</option>
+            </select>
+            <select x-model="filters.module" @change="loadRepo()" class="ff" style="width:120px" x-show="user?.role !== 'module'">
+              <option value="">All modules</option>
+              <template x-for="m in modules.filter(x => x.accessible)" :key="m.code">
+                <option :value="m.code" x-text="m.code"></option>
+              </template>
+            </select>
+            <button @click="openUploadModal()" class="btn btn-primary">
+              <i data-lucide="upload" class="w-4 h-4"></i>
+              Upload File
+            </button>
+          </div>
+        </div>
+
+        <div class="content-body">
+
+          <!-- Empty state -->
+          <template x-if="repo.files.length === 0">
+            <div class="card mb-3">
+              <div class="card-body text-center" style="padding:28px">
+                <i data-lucide="folder-open" class="w-10 h-10 text-dim mx-auto mb-3"></i>
+                <h3 class="font-semibold text-ink mb-1">No files yet</h3>
+                <p class="text-muted text-xs mb-3">Upload an XML or XLSX file to get started</p>
+                <button @click="openUploadModal()" class="btn btn-primary btn-sm">
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                  Upload file
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <!-- Files table -->
+          <div x-show="repo.files.length > 0" class="card">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Module</th>
+                  <th class="right">Records</th>
+                  <th class="right">Errors</th>
+                  <th>Status</th>
+                  <th>Uploaded</th>
+                  <th>Validated</th>
+                  <th>LTMC</th>
+                  <th class="right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="f in repo.files" :key="f.file_id">
+                  <tr :class="busyRow === f.file_id ? 'row-busy' : ''">
+                    <td>
+                      <div class="flex items-center gap-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-dim"></i>
+                        <span class="font-medium text-ink" x-text="f.filename"></span>
+                      </div>
+                    </td>
+                    <td><span class="pill pill-neutral" x-text="f.module"></span></td>
+                    <td class="right tabular" x-text="(f.row_count ?? 0).toLocaleString()"></td>
+                    <td class="right tabular">
+                      <span :class="f.error_count > 0 ? 'text-danger font-semibold' : 'text-success'" x-text="(f.error_count ?? 0).toLocaleString()"></span>
+                    </td>
+                    <td>
+                      <span :class="'pill status-' + f.status" x-text="formatStatus(f.status)"></span>
+                    </td>
+                    <td>
+                      <div class="text-xs text-ink-2" x-text="f.uploaded_by_name"></div>
+                      <div class="text-[10px] text-dim" x-text="formatTime(f.uploaded_at)"></div>
+                    </td>
+                    <td>
+                      <div x-show="f.validated_by">
+                        <div class="text-xs text-ink-2" x-text="f.validated_by_name"></div>
+                        <div class="text-[10px] text-dim" x-text="formatTime(f.validated_at)"></div>
+                      </div>
+                      <span x-show="!f.validated_by" class="text-dim text-xs">—</span>
+                    </td>
+                    <td>
+                      <div x-show="f.ltmc_uploaded_by">
+                        <div class="text-xs text-ink-2" x-text="f.ltmc_uploaded_by_name"></div>
+                        <div class="text-[10px] text-dim" x-text="formatTime(f.ltmc_uploaded_at)"></div>
+                      </div>
+                      <span x-show="!f.ltmc_uploaded_by" class="text-dim text-xs">—</span>
+                    </td>
+                    <td class="right">
+                      <div class="flex items-center gap-1 justify-end" @click.stop>
+                        <button @click="openFile(f.file_id)"
+                                :class="busyFor('open:'+f.file_id) ? 'btn-busy' : ''"
+                                class="btn btn-ghost btn-xs">
+                          <span x-show="busyFor('open:'+f.file_id)" class="inline-spinner inline-spinner-sm mr-1"></span>
+                          <span x-text="busyFor('open:'+f.file_id) ? 'Opening…' : 'Open'"></span>
+                        </button>
+                        <button x-show="f.status === 'in_progress' && canValidate(f.module) && (f.error_count ?? 0) === 0"
+                                @click="markValidated(f.file_id)" class="btn btn-success btn-xs">Mark validated</button>
+                        <button x-show="f.status === 'validated' && canRevoke(f)"
+                                @click="revokeValidation(f.file_id)" class="btn btn-ghost btn-xs">Revoke</button>
+                        <button x-show="f.status === 'validated' && canMarkLtmc()"
+                                @click="markLtmc(f.file_id)" class="btn btn-primary btn-xs">Mark LTMC</button>
+                        <button @click="downloadFile(f.file_id, f.filename)" class="btn btn-ghost btn-icon" title="Download">
+                          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button x-show="canDelete(f)" @click="deleteFile(f.file_id)" class="btn btn-danger btn-icon" title="Delete">
+                          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── DASHBOARD VIEW ─── -->
+      <section x-show="view === 'dashboard'" class="animate-fade-in">
+        <div class="content-header">
+          <div>
+            <div class="breadcrumb">
+              <a @click="setView('repository')">Repository</a>
+              <span class="sep">/</span>
+              <span x-text="dashboard.module"></span>
+              <span class="sep">/</span>
+            </div>
+            <h1 class="page-title flex items-center gap-2">
+              <span x-text="dashboard.filename"></span>
+              <span :class="'pill status-' + getFileStatus()" x-text="formatStatus(getFileStatus())"></span>
+            </h1>
+            <p class="page-subtitle">
+              <span x-text="dashboard.customer_count?.toLocaleString()"></span> records ·
+              <span x-text="dashboard.sheet_count"></span> sheets
+            </p>
+          </div>
+          <!-- Primary CTAs — top-right of header (Gmail/GitHub/Notion pattern).
+               Always visible, always in the same spot, above the fold. -->
+          <div class="header-actions">
+            <button type="button" @click="setView('decisions')"
+                    x-show="dashboard.pending_decisions > 0"
+                    class="btn btn-primary btn-lg">
+              <i data-lucide="zap" class="w-4 h-4"></i>
+              Resolve Decisions
+              <span class="pill-count" x-text="dashboard.pending_decisions"></span>
+            </button>
+            <button type="button" @click="setView('export')" class="btn btn-ghost">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              Export
+            </button>
+            <button type="button" @click="markValidatedCurrent()"
+                    x-show="dashboard.pending_errors === 0 && getFileStatus() === 'in_progress' && canValidateCurrent()"
+                    :class="busyFor('validate:'+dashboard.file_id) ? 'btn-busy' : ''"
+                    class="btn btn-success">
+              <span x-show="busyFor('validate:'+dashboard.file_id)" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('validate:'+dashboard.file_id)" data-lucide="check-circle-2" class="w-4 h-4"></i>
+              <span x-text="busyFor('validate:'+dashboard.file_id) ? 'Marking…' : 'Mark as Validated'"></span>
+            </button>
+            <button type="button" @click="closeCurrentFile()"
+                    class="btn btn-ghost btn-icon"
+                    title="Close file and free memory. Your changes are already saved.">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="content-body">
+          <!-- MM DATA-SHAPE WARNINGS — only renders for MM sessions with
+               warnings attached. Covers: wrong-file-pair uploads (alt/lt
+               reference different MATNRs than main), multi-plant fanout
+               (material exists at N plants — LTMC export must emit N
+               plant rows), and true duplicates (same MATNR+WERKS twice).
+               Warnings are dismissible visually but persistent in state
+               so they survive tab-switching. -->
+          <template x-if="dashboard.mm_warnings && dashboard.mm_warnings.length > 0">
+            <div class="mm-warnings-banner">
+              <div class="mm-warnings-header">
+                <i data-lucide="alert-triangle" class="w-4 h-4 text-warn"></i>
+                <span class="font-semibold">Data shape notes</span>
+                <span class="text-dim text-xs" x-text="'(' + dashboard.mm_warnings.length + ')'"></span>
+              </div>
+              <ul class="mm-warnings-list">
+                <template x-for="(msg, i) in dashboard.mm_warnings" :key="i">
+                  <li x-text="msg"></li>
+                </template>
+              </ul>
+            </div>
+          </template>
+
+          <!-- MM MULTI-PLANT / LOAD STATS — tiny secondary strip of the
+               kind of headline numbers that tell an SME "here's what your
+               file looks like overall". Only shows when mm_stats is
+               populated (MM sessions); kept compact so it doesn't shove
+               the decisions callout below the fold. -->
+          <template x-if="dashboard.mm_stats">
+            <div class="mm-stats-strip">
+              <div class="mm-stat">
+                <span class="mm-stat-label">Materials</span>
+                <span class="mm-stat-value tabular" x-text="dashboard.customer_count?.toLocaleString()"></span>
+              </div>
+              <div class="mm-stat" x-show="dashboard.mm_stats.plant_row_count > dashboard.customer_count">
+                <span class="mm-stat-label">Plant rows</span>
+                <span class="mm-stat-value tabular" x-text="dashboard.mm_stats.plant_row_count?.toLocaleString()"></span>
+              </div>
+              <div class="mm-stat" x-show="dashboard.mm_stats.multi_plant_count > 0">
+                <span class="mm-stat-label">Multi-plant</span>
+                <span class="mm-stat-value tabular" x-text="dashboard.mm_stats.multi_plant_count?.toLocaleString()"></span>
+              </div>
+              <div class="mm-stat" x-show="dashboard.mm_stats.duplicate_count > 0">
+                <span class="mm-stat-label">Duplicates</span>
+                <span class="mm-stat-value tabular text-warn" x-text="dashboard.mm_stats.duplicate_count?.toLocaleString()"></span>
+              </div>
+              <div class="mm-stat" x-show="(dashboard.mm_stats.orphan_alt_uom_count + dashboard.mm_stats.orphan_longtext_count) > 0">
+                <span class="mm-stat-label">Orphans</span>
+                <span class="mm-stat-value tabular text-warn"
+                      x-text="(dashboard.mm_stats.orphan_alt_uom_count + dashboard.mm_stats.orphan_longtext_count).toLocaleString()"></span>
+              </div>
+              <div class="mm-stat" x-show="dashboard.mm_stats.distinct_plants?.length > 0">
+                <span class="mm-stat-label">Plants</span>
+                <span class="mm-stat-value mono text-xs"
+                      x-text="dashboard.mm_stats.distinct_plants?.join(', ')"></span>
+              </div>
+            </div>
+          </template>
+
+          <!-- PENDING DECISIONS CALLOUT — impossible to miss when page loads -->
+          <template x-if="dashboard.pending_decisions > 0">
+            <div class="pending-callout" @click="setView('decisions')">
+              <div class="pending-callout-icon">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+              </div>
+              <div class="pending-callout-body">
+                <div class="pending-callout-title">
+                  <span class="tabular" x-text="dashboard.pending_decisions"></span>
+                  decision<span x-show="dashboard.pending_decisions !== 1">s</span> need your attention
+                </div>
+                <div class="pending-callout-sub">
+                  <span class="tabular" x-text="dashboard.pending_errors?.toLocaleString()"></span> errors grouped ·
+                  resolve them in bulk or individually
+                </div>
+              </div>
+              <button type="button" class="btn btn-primary" @click.stop="setView('decisions')">
+                Resolve now
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </template>
+
+          <div class="kpi-row">
+            <div class="kpi">
+              <div class="kpi-label">Records</div>
+              <div class="kpi-value stat-num" x-text="dashboard.customer_count?.toLocaleString() ?? '—'"></div>
+              <div class="kpi-sub"><span x-text="dashboard.sheet_count"></span> sheets</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">Pending errors</div>
+              <div class="kpi-value stat-num text-danger" x-text="dashboard.pending_errors?.toLocaleString() ?? '0'"></div>
+              <div class="kpi-sub"><span class="text-success" x-text="dashboard.resolved_errors?.toLocaleString()"></span> resolved</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">Decisions</div>
+              <div class="kpi-value stat-num text-brand" x-text="dashboard.pending_decisions?.toLocaleString() ?? '0'"></div>
+              <div class="kpi-sub">
+                <span class="text-brand tabular" x-text="dashboard.pattern_decisions"></span> pattern ·
+                <span class="tabular" x-text="dashboard.individual_decisions"></span> individual
+              </div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">Completion</div>
+              <div class="kpi-value stat-num text-success" x-text="(dashboard.completion_pct ?? 0) + '%'"></div>
+              <div class="progress-track mt-2">
+                <div class="progress-fill success" :style="`width:${dashboard.completion_pct ?? 0}%`"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3">
+            <!-- Sheets -->
+            <div class="card col-span-2">
+              <div class="card-header">
+                <span class="card-title">Sheets</span>
+                <span class="text-xs text-muted" x-text="dashboard.sheets?.length + ' active'"></span>
+              </div>
+              <div class="card-body-flush">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Sheet</th>
+                      <th class="right">Rows</th>
+                      <th class="right">Errors</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="s in (dashboard.sheets ?? [])" :key="s.name">
+                      <tr>
+                        <td class="font-medium text-ink" x-text="s.name"></td>
+                        <td class="right tabular" x-text="s.rows?.toLocaleString()"></td>
+                        <td class="right">
+                          <span :class="s.errors > 0 ? 'text-danger font-semibold tabular' : 'text-success tabular'" x-text="s.errors.toLocaleString()"></span>
+                        </td>
+                        <td class="right">
+                          <span x-show="s.errors === 0" class="pill pill-success">Clean</span>
+                          <span x-show="s.errors > 0" class="pill pill-danger">Issues</span>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Activity -->
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Recent Activity</span>
+                <span class="pill pill-neutral tabular" x-text="(audit.persistent?.length) ?? (audit.log?.length ?? 0)"></span>
+              </div>
+              <div class="card-body" style="padding:0">
+                <template x-if="(!audit.persistent || audit.persistent.length === 0) && (!audit.log || audit.log.length === 0)">
+                  <div class="text-center py-6 text-dim text-xs">
+                    <i data-lucide="history" class="w-6 h-6 mx-auto mb-2"></i>
+                    <div>No activity yet</div>
+                  </div>
+                </template>
+                <div style="max-height:400px; overflow-y:auto">
+                  <!-- Persistent per-file audit (from Postgres) -->
+                  <template x-for="entry in (audit.persistent ?? []).slice(0, 30)" :key="'p' + entry.id">
+                    <div class="px-3.5 py-2.5 border-b border-gray-100 hover:bg-gray-50">
+                      <div class="flex items-start gap-2">
+                        <div class="user-avatar shrink-0" x-text="entry.display_name?.substring(0,2)?.toUpperCase()"></div>
+                        <div class="flex-1 min-w-0">
+                          <div class="text-xs text-ink">
+                            <span class="font-medium" x-text="entry.display_name"></span>
+                            <span class="text-muted"> · </span>
+                            <span :class="auditActionPillClass(entry.action)" class="pill" x-text="formatActionLabel(entry.action)"></span>
+                          </div>
+                          <div class="text-[11px] text-muted mt-1">
+                            <span x-show="entry.sheet" x-text="entry.sheet"></span>
+                            <span x-show="entry.sheet"> · </span>
+                            <span class="tabular" x-text="entry.affected_count || 0"></span> rows
+                            <span> · </span>
+                            <span x-text="formatTime(entry.timestamp)"></span>
+                          </div>
+                          <div x-show="entry.reason" class="text-[11px] text-ink-2 mt-1 italic" x-text="'“' + entry.reason + '”'"></div>
+                        </div>
+                        <button @click="tryUndoFromPersistent(entry)"
+                                class="btn btn-ghost btn-icon" title="Undo (only recent session actions)" x-show="canUndoPersistent(entry)">
+                          <i data-lucide="undo-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section x-show="view === 'decisions'" class="animate-fade-in">
+        <div class="content-header">
+          <div>
+            <div class="breadcrumb">
+              <a @click="setView('repository')">Repository</a>
+              <span class="sep">/</span>
+              <a @click="setView('dashboard')" x-text="dashboard.filename"></a>
+              <span class="sep">/</span>
+            </div>
+            <h1 class="page-title">Decisions</h1>
+            <p class="page-subtitle">
+              <span class="text-danger tabular font-semibold" x-text="dashboard.pending_errors?.toLocaleString()"></span>
+              errors collapsed to
+              <span class="text-brand tabular font-semibold" x-text="dashboard.pending_decisions?.toLocaleString()"></span>
+              decisions
+              <span class="text-dim" x-show="dashboard.pending_decisions > 0"> (
+                <span class="text-brand" x-text="reductionRatio()"></span>×
+                reduction)</span>
+            </p>
+            <!-- v62: LTMC overrides set this session.
+                 Shows the values the SME entered via "Set LTMC default value"
+                 actions on missing-from-source LTMC-mandatory fields like
+                 BWKEY, ALAND, WAERS, CURTP, SPRAS. Each chip links the SAP
+                 code → the value that will populate that column in every
+                 material's row of the LTMC export. -->
+            <div x-show="ltmcOverrides && Object.keys(ltmcOverrides).length > 0"
+                 class="flex flex-wrap items-center gap-1.5 mt-2">
+              <span class="text-[10px] uppercase tracking-wider text-muted font-semibold">LTMC defaults set:</span>
+              <!-- v63: each chip now shows the friendly label alongside
+                   the SAP code instead of just "BWKEY=PE01". Example:
+                   "Valuation Area (BWKEY) = PE01". The friendly label is
+                   resolved via ltmcFriendlyLabel(code) which maps SAP
+                   codes to their human names — same mapping the LTMC
+                   inventory uses on the backend (mm_ltmc_mandatory.py). -->
+              <template x-for="[code, val] in Object.entries(ltmcOverrides || {})" :key="code">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-blue-50 text-blue-900 border border-blue-200">
+                  <span x-text="ltmcFriendlyLabel(code)"></span>
+                  <span class="text-blue-600 font-mono text-[10px]" x-text="'(' + code + ')'"></span>
+                  <span class="text-blue-600">=</span>
+                  <span class="font-mono font-semibold" x-text="val"></span>
+                </span>
+              </template>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1 text-xs bg-white border border-gray-300 rounded p-0.5">
+              <button @click="filter='all'" :class="filter==='all' ? 'bg-gray-100 text-ink' : 'text-muted'" class="px-2 py-0.5 rounded">All (<span x-text="decisions.length"></span>)</button>
+              <button @click="filter='pattern'" :class="filter==='pattern' ? 'bg-gray-100 text-ink' : 'text-muted'" class="px-2 py-0.5 rounded">Pattern</button>
+              <button @click="filter='individual'" :class="filter==='individual' ? 'bg-gray-100 text-ink' : 'text-muted'" class="px-2 py-0.5 rounded">Individual</button>
+            </div>
+            <input x-model="search" type="text" placeholder="Search…" class="ff" style="width:200px"/>
+            <button @click="reloadAll()" class="btn btn-ghost" title="Refresh">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="content-body">
+          <!-- Empty state -->
+          <template x-if="filteredDecisions().length === 0 && dashboard.loaded">
+            <div class="card">
+              <div class="card-body text-center" style="padding:36px">
+                <i data-lucide="check-circle-2" class="w-10 h-10 text-success mx-auto mb-3"></i>
+                <h3 class="font-semibold text-ink mb-1">All clear.</h3>
+                <p class="text-muted text-xs mb-3">No pending decisions.</p>
+                <button @click="setView('export')" class="btn btn-primary btn-sm">
+                  <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                  Export LTMC-ready XML
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <!-- Decision cards -->
+          <template x-for="d in filteredDecisions()" :key="d.decision_id">
+            <article :class="'decision-card ' + (d.severity === 'warning' ? 'warn' : '')">
+              <div class="decision-card-body">
+                <div class="decision-card-header">
+                  <div class="w-8 h-8 rounded shrink-0 flex items-center justify-center"
+                       :class="d.severity === 'error' ? 'bg-red-50 text-danger' : 'bg-amber-50 text-warn'">
+                    <i :data-lucide="d.kind === 'pattern' ? 'layers' : 'list-checks'" class="w-4 h-4"></i>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="decision-card-meta">
+                      <span :class="d.kind === 'pattern' ? 'text-brand' : 'text-muted'"
+                            x-text="d.kind === 'pattern' ? 'Pattern' : 'Individual'"></span>
+                      <span class="text-dim">·</span>
+                      <span class="text-dim font-mono normal-case tracking-normal" x-text="d.sheet"></span>
+                    </div>
+                    <div class="decision-card-title" x-text="d.rule_name"></div>
+                    <div class="text-xs text-muted mt-0.5">
+                      <!-- v63: show both the business-friendly column label
+                           AND the SAP code (e.g. "Price ctrl (VPRSV)") so SMEs
+                           can map what they see in the UI to what's in their
+                           file headers and SAP system without having to
+                           cross-reference. The SAP code is shown small and
+                           muted so it doesn't dominate. -->
+                      <span class="font-medium text-ink-2" x-text="d.column_label"></span>
+                      <span x-show="d.sap_field && d.sap_field !== d.column_label"
+                            class="text-dim font-mono ml-1"
+                            x-text="'(' + d.sap_field + ')'"></span>
+                      <span class="mx-1">·</span>
+                      <span x-show="d.kind === 'pattern'">
+                        <span class="tabular font-semibold" x-text="d.affected_count?.toLocaleString()"></span> rows share the same value
+                      </span>
+                      <span x-show="d.kind === 'individual'">
+                        <span class="tabular font-semibold" x-text="d.affected_count?.toLocaleString()"></span> rows need review
+                        <span x-show="d.unique_value_count > 1"> · <span x-text="d.unique_value_count"></span> unique values</span>
+                      </span>
+                    </div>
+                    <div class="decision-card-sample" x-show="d.kind === 'pattern' && d.sample_value" x-text="d.sample_value"></div>
+                  </div>
+                  <div class="decision-card-count stat-num" :class="d.severity === 'error' ? 'text-danger' : 'text-warn'" x-text="d.affected_count?.toLocaleString()"></div>
+                </div>
+              </div>
+              <div class="decision-card-actions">
+                <template x-for="action in d.suggested_actions" :key="action.id">
+                  <button @click="triggerAction(d, action)"
+                          :class="action.id === 'review' ? 'btn-ghost' : 'btn-primary'"
+                          class="btn btn-sm" x-text="action.label"></button>
+                </template>
+                <div class="flex-1"></div>
+                <!-- Group & Replace — shown only when this decision's errors
+                     cluster into a small number of distinct values (the
+                     is_categorical flag, computed server-side). Irrelevant for
+                     duplicate_record (every row unique) and gstin_length (each
+                     value distinct); would just show a 1-to-1 list. -->
+                <button x-show="d.is_categorical" @click="openGroupReplace(d)"
+                        :class="busyFor('grp:'+d.decision_id) ? 'btn-busy' : ''"
+                        class="btn btn-ghost btn-sm"
+                        title="Group cells by value and replace each distinct bad value in one pass — fastest when many rows share the same typo.">
+                  <span x-show="busyFor('grp:'+d.decision_id)" class="inline-spinner inline-spinner-sm"></span>
+                  <i x-show="!busyFor('grp:'+d.decision_id)" data-lucide="layers" class="w-3.5 h-3.5"></i>
+                  <span x-text="busyFor('grp:'+d.decision_id) ? 'Loading…' : 'Group & replace'"></span>
+                </button>
+                <button @click="fixIndividually(d)"
+                        :class="busyFor('fixind:'+d.decision_id) ? 'btn-busy' : ''"
+                        class="btn btn-ghost btn-sm"
+                        title="Open the first affected row in the record editor — fix one at a time with full context">
+                  <span x-show="busyFor('fixind:'+d.decision_id)" class="inline-spinner inline-spinner-sm"></span>
+                  <i x-show="!busyFor('fixind:'+d.decision_id)" data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                  <span x-text="busyFor('fixind:'+d.decision_id) ? 'Opening…' : 'Fix individually'"></span>
+                </button>
+                <button @click="previewRows(d)"
+                        :class="busyFor('preview:'+d.decision_id) ? 'btn-busy' : ''"
+                        class="btn btn-ghost btn-sm">
+                  <span x-show="busyFor('preview:'+d.decision_id)" class="inline-spinner inline-spinner-sm"></span>
+                  <i x-show="!busyFor('preview:'+d.decision_id)" data-lucide="eye" class="w-3.5 h-3.5"></i>
+                  <span x-text="busyFor('preview:'+d.decision_id) ? 'Loading…' : 'Preview affected rows'"></span>
+                </button>
+              </div>
+            </article>
+          </template>
+        </div>
+      </section>
+
+      <!-- ─── ERROR GRID VIEW ─── -->
+      <section x-show="view === 'grid'" class="animate-fade-in">
+        <div class="content-header">
+          <div>
+            <div class="breadcrumb">
+              <a @click="setView('repository')">Repository</a>
+              <span class="sep">/</span>
+              <a @click="setView('dashboard')" x-text="dashboard.filename"></a>
+              <span class="sep">/</span>
+            </div>
+            <h1 class="page-title">Error Grid</h1>
+            <p class="page-subtitle">
+              <span class="tabular font-semibold" x-text="allErrors.length"></span> errors
+              · click any row to fix in-place
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select x-model="gridFilter.sheet" @change="recomputeGridCache()" class="ff" style="width:160px">
+              <option value="">All sheets</option>
+              <template x-for="s in (dashboard.sheets ?? [])" :key="s.name">
+                <option :value="s.name" x-text="s.name"></option>
+              </template>
+            </select>
+            <select x-model="gridFilter.rule" @change="recomputeGridCache()" class="ff" style="width:200px">
+              <option value="">All rules</option>
+              <template x-for="r in uniqueRules()" :key="r">
+                <option :value="r" x-text="r"></option>
+              </template>
+            </select>
+            <input x-model="gridFilter.search" @input="onGridSearchInput()"
+                   type="text" placeholder="Search…" class="ff" style="width:200px"/>
+            <!-- Find & Replace — opens a modal with the current filters pre-populated,
+                 scope is always "only cells already flagged by validators" so
+                 clean data can never be accidentally touched. Ctrl+H also opens it. -->
+            <button @click="openFindReplace()" class="btn btn-ghost whitespace-nowrap"
+                    title="Find and replace (Ctrl+H)">
+              <i data-lucide="replace" class="w-3.5 h-3.5 mr-1"></i>
+              Find &amp; replace
+            </button>
+          </div>
+        </div>
+
+        <div class="content-body">
+          <!-- Truncation banner — shown when filter still has > 500 results. -->
+          <template x-if="gridCache.truncated">
+            <div class="card mb-3" style="border-color:#fde68a; background:#fffbeb">
+              <div class="card-body flex items-center gap-3" style="padding:10px 14px">
+                <i data-lucide="info" class="w-4 h-4 text-warn shrink-0"></i>
+                <div class="flex-1 text-xs text-ink-2">
+                  Showing first <span class="font-semibold tabular">500</span> of
+                  <span class="font-semibold tabular" x-text="gridCache.total.toLocaleString()"></span>
+                  matching errors. Narrow with the filters above, or use the
+                  <button @click="setView('decisions')" class="text-brand font-semibold underline">Decisions page</button>
+                  to resolve them in bulk.
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div class="card">
+            <div class="card-body-flush" style="overflow-x:auto">
+              <table class="table table-condensed">
+                <thead>
+                  <tr>
+                    <th class="right" style="width:60px">Row</th>
+                    <th>Sheet</th>
+                    <th>Rule</th>
+                    <th>Column</th>
+                    <th>Current Value</th>
+                    <th>Issue</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(e, i) in gridCache.rows" :key="i">
+                    <tr class="error-row"
+                        :class="busyRow === (e.sheet + ':' + e.row_idx) ? 'row-busy' : ''"
+                        @click="openRecord(e.sheet, e.row_idx)">
+                      <td class="right tabular text-muted" x-text="e.xml_row"></td>
+                      <td x-text="e.sheet"></td>
+                      <td>
+                        <span class="pill pill-danger" x-text="e.rule_name"></span>
+                      </td>
+                      <!-- v63: column cell shows friendly + SAP code together
+                           (e.g. "Price ctrl (VPRSV)"). Same approach as the
+                           decision card subtitle. When the backend has already
+                           resolved column_label to the friendly name, this is
+                           a free win — when it hasn't (older audit entries),
+                           the suppression check below avoids "(VKORG) (VKORG)". -->
+                      <td class="text-ink font-medium">
+                        <span x-text="e.column_label"></span>
+                        <span x-show="e.sap_field && e.sap_field !== e.column_label"
+                              class="text-dim font-mono ml-1 text-[10px]"
+                              x-text="'(' + e.sap_field + ')'"></span>
+                      </td>
+                      <td class="mono" x-text="e.value || '(blank)'"></td>
+                      <td class="text-muted" x-text="e.message"></td>
+                      <td class="right">
+                        <button class="btn btn-primary btn-xs" @click.stop="openRecord(e.sheet, e.row_idx)">Fix</button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── RECORD EDITOR VIEW (errors-first) ─── -->
+      <section x-show="view === 'records'" class="animate-fade-in">
+        <template x-if="!record.data">
+          <div class="content-body text-center" style="padding:64px">
+            <i data-lucide="file-text" class="w-10 h-10 text-dim mx-auto mb-3"></i>
+            <p class="text-muted text-sm">Select a record from Decisions or Error Grid.</p>
+            <button @click="setView('decisions')" class="btn btn-ghost btn-sm mt-3">Back to decisions</button>
+          </div>
+        </template>
+
+        <template x-if="record.data">
+          <div class="record-view-wrapper">
+            <!-- FLOW BANNER — only visible during Fix Individually flows.
+                 Stays pinned below the content-header, shows the decision
+                 name + position + primary "Save & Next" action right where
+                 the user's eyes are trained to look after pressing Save. -->
+            <template x-if="inFixFlow()">
+              <div class="flow-banner">
+                <div class="flow-banner-left">
+                  <div class="flow-banner-label">
+                    <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                    <span>Fixing</span>
+                    <span class="flow-banner-rule" x-text="record.flow.decision.rule_name"></span>
+                  </div>
+                  <div class="flow-banner-progress">
+                    <span class="tabular font-semibold" x-text="flowProgressLabel()"></span>
+                    <span class="text-dim"> · </span>
+                    <span class="tabular" x-text="flowRemaining().toLocaleString()"></span>
+                    <span class="text-dim"> remaining</span>
+                  </div>
+                </div>
+                <div class="flow-banner-right">
+                  <button @click="backToDecisions()" class="btn btn-ghost btn-sm">
+                    <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+                    Back to Decisions
+                  </button>
+                  <button @click="skipAndNext()" class="btn btn-ghost btn-sm"
+                          :disabled="busyFor('save:record')"
+                          title="Skip this row without saving — discards any edits">
+                    <span>Skip</span>
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button @click="saveAndNext()" class="btn btn-primary"
+                          :class="busyFor('save:record') ? 'btn-busy' : ''"
+                          title="Save edits and jump to the next affected row">
+                    <span x-show="busyFor('save:record')" class="inline-spinner inline-spinner-sm"></span>
+                    <i x-show="!busyFor('save:record')" data-lucide="arrow-right" class="w-4 h-4"></i>
+                    <span x-text="flowRemaining() > 0 ? 'Save & Next' : 'Save & Finish'"></span>
+                    <kbd class="ml-1">Ctrl+Enter</kbd>
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <div class="content-header">
+              <div>
+                <div class="breadcrumb">
+                  <a @click="setView('repository')">Repository</a>
+                  <span class="sep">/</span>
+                  <a @click="setView('dashboard')" x-text="dashboard.filename"></a>
+                  <span class="sep">/</span>
+                  <a @click="backToDecisions()">Decisions</a>
+                  <span class="sep">/</span>
+                </div>
+                <h1 class="page-title flex items-center gap-2">
+                  <span x-text="recordTitle()"></span>
+                  <span x-show="record.data?.errors?.length > 0" class="pill pill-danger" x-text="record.data.errors.length + ' issues'"></span>
+                  <span x-show="record.data?.errors?.length === 0" class="pill pill-success">Clean</span>
+                </h1>
+                <p class="page-subtitle">
+                  <span x-text="record.data?.sheet"></span> ·
+                  row <span class="tabular" x-text="record.data?.row_idx + 1"></span> of
+                  <span class="tabular" x-text="record.data?.total_rows_in_sheet?.toLocaleString()"></span>
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button @click="navigateError(-1)" class="btn btn-ghost" :disabled="record.data?.prev_error_row === null">
+                  <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                  <span>Prev error</span>
+                  <kbd class="ml-1">K</kbd>
+                </button>
+                <button @click="navigateError(1)" class="btn btn-ghost" :disabled="record.data?.next_error_row === null">
+                  <span>Next error</span>
+                  <kbd class="ml-1">J</kbd>
+                  <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+                <div class="divider-v"></div>
+                <button @click="navigateRow(-1)" class="btn btn-ghost btn-sm" :disabled="record.data?.row_idx === 0">
+                  <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+                  Prev row
+                </button>
+                <button @click="navigateRow(1)" class="btn btn-ghost btn-sm" :disabled="record.data?.row_idx >= (record.data?.total_rows_in_sheet - 1)">
+                  Next row
+                  <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                </button>
+                <div class="divider-v"></div>
+                <button @click="deleteCurrentRow()" class="btn btn-danger btn-sm">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  Delete row
+                </button>
+                <!-- Save button: hidden during flow (flow banner has Save & Next instead) -->
+                <button @click="saveRecord()" class="btn btn-primary" x-show="!inFixFlow()">
+                  <i data-lucide="save" class="w-4 h-4"></i>
+                  Save
+                </button>
+              </div>
+            </div>
+
+            <div class="content-body">
+              <div class="record-layout">
+                <!-- Sidebar: context -->
+                <div class="record-sidebar">
+                  <div class="mb-4">
+                    <div class="text-[10px] uppercase tracking-wider font-semibold text-muted mb-1"
+                         x-text="dashboard.module === 'MM' ? 'Material' : 'Customer'"></div>
+                    <!-- For MM: show MAKTX (description) as the headline and MATNR
+                         (number) as the mono-font sub-label. record.data.context
+                         holds these — the MM record endpoint populates context
+                         with {Material Number: matnr, Description: maktx, ...}. -->
+                    <template x-if="dashboard.module === 'MM'">
+                      <div>
+                        <div class="font-bold text-ink"
+                             x-text="(record.data?.context?.Description) || ('Row ' + record.data?.xml_row)"></div>
+                        <div class="text-xs text-muted mt-0.5 font-mono"
+                             x-text="record.data?.context?.['Material Number'] || ''"></div>
+                      </div>
+                    </template>
+                    <template x-if="dashboard.module !== 'MM'">
+                      <div>
+                        <div class="font-bold text-ink" x-text="record.customerName || 'Row ' + record.data?.xml_row"></div>
+                        <div class="text-xs text-muted mt-0.5 font-mono" x-text="record.customerNum"></div>
+                      </div>
+                    </template>
+                  </div>
+
+                  <template x-if="Object.keys(record.data?.context ?? {}).length > 0">
+                    <div class="mb-4">
+                      <div class="text-[10px] uppercase tracking-wider font-semibold text-muted mb-2">Related Records</div>
+                      <div class="space-y-1">
+                        <template x-for="[name, count] in Object.entries(record.data?.context ?? {})" :key="name">
+                          <div class="flex items-center justify-between text-xs py-1">
+                            <span x-text="name"></span>
+                            <span class="tabular text-muted" x-text="count"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+
+                  <div class="divider"></div>
+                  <div class="text-[10px] uppercase tracking-wider font-semibold text-muted mb-2">Keyboard</div>
+                  <div class="space-y-1 text-[11px] text-muted">
+                    <div class="flex justify-between"><span>Next error</span><kbd>J</kbd></div>
+                    <div class="flex justify-between"><span>Prev error</span><kbd>K</kbd></div>
+                    <div class="flex justify-between"><span>Save</span><kbd>Ctrl+S</kbd></div>
+                    <div class="flex justify-between"><span>Back</span><kbd>Esc</kbd></div>
+                  </div>
+                </div>
+
+                <!-- Form: errors first, then all fields -->
+                <div>
+                  <!-- ERRORS BANNER (pinned top). During a Fix-Individually
+                       flow this is filtered to only the decision's rule so
+                       the user focuses on one fix per row. Other errors on
+                       the row re-appear when the flow exits. -->
+                  <template x-if="focusedErrors().length > 0">
+                    <div class="errors-banner">
+                      <div class="errors-banner-title">
+                        <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                        <template x-if="inFixFlow()">
+                          <span>Fixing <span x-text="record.flow.decision.rule_name"></span></span>
+                        </template>
+                        <template x-if="!inFixFlow()">
+                          <span>Issues on this record (<span x-text="record.data.errors.length"></span>)</span>
+                        </template>
+                      </div>
+                      <template x-for="err in focusedErrors()" :key="err.col_idx + ':' + err.rule_id">
+                        <div class="error-item">
+                          <div>
+                            <div class="error-item-label" x-text="err.column_label"></div>
+                            <div class="error-item-msg" x-text="err.message"></div>
+                            <!-- RELATED FIELDS — read-only context next to the editor.
+                                 For dl_expired shows the DL Number; for state errors
+                                 shows Postal Code + Country; etc. Saves a trip to
+                                 "All fields" to check the related value. -->
+                            <template x-if="err.related_fields && err.related_fields.length > 0">
+                              <div class="related-fields">
+                                <template x-for="rf in err.related_fields" :key="rf.label">
+                                  <div class="related-field">
+                                    <span class="related-field-label" x-text="rf.label"></span>
+                                    <span class="related-field-value mono" x-text="rf.value || '(blank)'"></span>
+                                  </div>
+                                </template>
+                              </div>
+                            </template>
+                            <!-- CHAR-LEVEL DIAGNOSTICS for PAN/GSTIN: show the
+                                 value character by character, highlighting the
+                                 positions where the format failed. Tooltip
+                                 shows what was expected at that position.
+                                 For length errors (pos == -1) we just show a
+                                 text note instead. -->
+                            <template x-if="err.char_issues && err.char_issues.length > 0 && err.char_issues[0].pos < 0">
+                              <div class="char-diag-length">
+                                <i data-lucide="alert-circle" class="w-3 h-3 inline"
+                                   style="vertical-align:-1px; color:#b91c1c"></i>
+                                <span>Length: <span class="font-semibold" x-text="err.char_issues[0].got"></span>
+                                (expected <span class="font-semibold" x-text="err.char_issues[0].expected"></span>)</span>
+                              </div>
+                            </template>
+                            <template x-if="err.char_issues && err.char_issues.length > 0 && err.char_issues[0].pos >= 0">
+                              <div class="char-diag">
+                                <div class="char-diag-label">Problem position<span x-show="err.char_issues.length > 1">s</span>:</div>
+                                <div class="char-diag-row">
+                                  <!-- Chips for each existing character -->
+                                  <template x-for="(ch, i) in err.value.replace(/ /g, '').toUpperCase().split('')" :key="'e'+i">
+                                    <span class="char-cell"
+                                          :class="charIssueAt(err, i) ? 'char-bad' : 'char-ok'"
+                                          :title="charIssueAt(err, i) ? ('Position ' + (i+1) + ': expected ' + charIssueAt(err, i).expected + ', got ' + ch) : ''">
+                                      <span class="char-glyph" x-text="ch"></span>
+                                      <span class="char-pos" x-text="i + 1"></span>
+                                    </span>
+                                  </template>
+                                  <!-- Extra "missing" chip(s) when diagnostic flags a position
+                                       past the end of the value (e.g. 14-char GSTIN missing its
+                                       15th check digit). Highlighted in red with an em-dash
+                                       glyph so SMEs see exactly where the value was cut off. -->
+                                  <template x-for="iss in (err.char_issues || []).filter(i => i.pos >= err.value.replace(/ /g, '').length)" :key="'m'+iss.pos">
+                                    <span class="char-cell char-missing"
+                                          :title="'Position ' + (iss.pos + 1) + ': missing — expected ' + iss.expected">
+                                      <span class="char-glyph">—</span>
+                                      <span class="char-pos" x-text="iss.pos + 1"></span>
+                                    </span>
+                                  </template>
+                                </div>
+                                <div class="char-diag-hint">
+                                  <template x-for="iss in err.char_issues" :key="iss.pos">
+                                    <span class="char-diag-chip">
+                                      Pos <span x-text="iss.pos + 1"></span>:
+                                      <span class="char-got" x-text="iss.got"></span>
+                                      → expected <span class="char-exp" x-text="iss.expected"></span>
+                                    </span>
+                                  </template>
+                                </div>
+                              </div>
+                            </template>
+                            <div class="text-[10px] text-brand mt-0.5" x-show="errorFormatHint(err)">
+                              <i data-lucide="info" class="w-3 h-3 inline" style="vertical-align:-1px"></i>
+                              <span x-text="errorFormatHint(err)"></span>
+                            </div>
+                            <!-- Character counter for text over limit -->
+                            <div class="text-[10px] mt-0.5"
+                                 x-show="err.ete_length && (err.ete_type === 'C' || err.ete_type === 'N')"
+                                 :class="(record.edits[err.col_idx] ?? err.value ?? '').length > err.ete_length ? 'text-danger font-semibold' : 'text-muted'">
+                              <span class="tabular" x-text="(record.edits[err.col_idx] ?? err.value ?? '').length"></span>
+                              / <span class="tabular" x-text="err.ete_length"></span> characters
+                            </div>
+                          </div>
+                          <div class="smart-editor">
+                            <!-- KDS DROPDOWN: when the validator returned the
+                                 full set of valid values for this field (e.g.
+                                 "this Plant supports these 23 storage locations"),
+                                 render a searchable dropdown so the SME picks
+                                 from the allowed set instead of typing.
+                                 Shown only when options > 1 — single-option
+                                 cases are already handled by the Apply button
+                                 above. `size="1"` keeps it as a standard
+                                 dropdown; the browser's native typeahead
+                                 handles search without extra JS. -->
+                            <template x-if="err.suggested_options && err.suggested_options.length > 1">
+                              <div class="kds-suggest-row">
+                                <div class="kds-suggest-label">
+                                  <i data-lucide="list" class="w-3 h-3 inline"
+                                     style="vertical-align:-1px; color:#7c3aed"></i>
+                                  <span>Pick a valid value:</span>
+                                  <span class="text-dim text-[10px]">(<span x-text="err.suggested_options.length"></span> options)</span>
+                                </div>
+                                <select class="ff"
+                                        style="max-width:280px; padding:4px 8px; font-size:11.5px"
+                                        @change="record.edits[err.col_idx] = $event.target.value"
+                                        :title="'Select from the '+err.suggested_options.length+' values valid for this field'">
+                                  <option value="">— choose —</option>
+                                  <template x-for="opt in err.suggested_options" :key="opt.value">
+                                    <option :value="opt.value"
+                                            x-text="opt.value + (opt.label && opt.label !== opt.value ? ' — ' + opt.label : '')">
+                                    </option>
+                                  </template>
+                                </select>
+                              </div>
+                            </template>
+                            <!-- KDS QUICK-APPLY: one-click button when the validator
+                                 returned a canonical value (e.g. Incoterms maps to
+                                 a specific description per KDS). Zero typing fix. -->
+                            <template x-if="err.suggested_value">
+                              <div class="kds-suggest-row">
+                                <div class="kds-suggest-label">
+                                  <i data-lucide="sparkles" class="w-3 h-3 inline"
+                                     style="vertical-align:-1px; color:#7c3aed"></i>
+                                  <span>KDS value:</span>
+                                  <span class="kds-suggest-value" x-text="err.suggested_value"></span>
+                                </div>
+                                <button type="button"
+                                        class="btn btn-primary btn-xs"
+                                        @click="record.edits[err.col_idx] = err.suggested_value"
+                                        title="Apply the KDS-canonical value to this field">
+                                  <i data-lucide="check" class="w-3 h-3"></i>
+                                  Apply
+                                </button>
+                              </div>
+                            </template>
+                            <!-- URP QUICK-APPLY: for GSTIN errors, single-click set
+                                 to URP (unregistered) without having to type it. -->
+                            <template x-if="err.rule_id === 'gstin_length' || err.rule_id === 'gstin_format' || err.rule_id === 'invalid_pan'">
+                              <div class="kds-suggest-row">
+                                <div class="kds-suggest-label">
+                                  <i data-lucide="shield" class="w-3 h-3 inline"
+                                     style="vertical-align:-1px; color:#475569"></i>
+                                  <span x-show="err.rule_id === 'invalid_pan'">Customer has no PAN?</span>
+                                  <span x-show="err.rule_id !== 'invalid_pan'">Customer unregistered under GST?</span>
+                                </div>
+                                <button type="button"
+                                        class="btn btn-ghost btn-xs"
+                                        @click="record.edits[err.col_idx] = 'URP'"
+                                        title="Mark as URP (Unregistered Person) — valid SAP value">
+                                  Set as URP
+                                </button>
+                              </div>
+                            </template>
+
+                            <!-- DATE FIELDS: date picker instead of text input -->
+                            <template x-if="errorEditorType(err) === 'date'">
+                              <div class="smart-editor-row">
+                                <input type="date"
+                                       :value="toDateValue(record.edits[err.col_idx] ?? err.value)"
+                                       @input="record.edits[err.col_idx] = fromDateValue($event.target.value)"
+                                       class="error-item-input"/>
+                                <button type="button" class="btn btn-ghost btn-xs" title="Clear"
+                                        @click="record.edits[err.col_idx] = ''">
+                                  <i data-lucide="x" class="w-3 h-3"></i>
+                                  Clear
+                                </button>
+                                <button type="button" class="btn btn-ghost btn-xs"
+                                        title="Extend expiry: add 1 year to the current date (or today if blank)"
+                                        @click="record.edits[err.col_idx] = dateAddYears(toDateValue(record.edits[err.col_idx] ?? err.value) || new Date(), 1)">
+                                  +1 year
+                                </button>
+                              </div>
+                            </template>
+                            <!-- INDIA STATE: dropdown with GST code + name -->
+                            <template x-if="errorEditorType(err) === 'state_in'">
+                              <div class="smart-editor-row">
+                                <select :value="record.edits[err.col_idx] ?? err.value"
+                                        @change="record.edits[err.col_idx] = $event.target.value"
+                                        class="error-item-input">
+                                  <option value="">— Select state —</option>
+                                  <template x-for="s in refData.indiaStates" :key="s.code">
+                                    <option :value="s.code" x-text="s.code + ' · ' + s.name"></option>
+                                  </template>
+                                </select>
+                                <button type="button" class="btn btn-ghost btn-xs" title="Clear"
+                                        @click="record.edits[err.col_idx] = ''">
+                                  <i data-lucide="x" class="w-3 h-3"></i>
+                                  Clear
+                                </button>
+                              </div>
+                            </template>
+                            <!-- COUNTRY: ISO alpha-2 dropdown -->
+                            <template x-if="errorEditorType(err) === 'country'">
+                              <div class="smart-editor-row">
+                                <select :value="record.edits[err.col_idx] ?? err.value"
+                                        @change="record.edits[err.col_idx] = $event.target.value"
+                                        class="error-item-input">
+                                  <option value="">— Select country —</option>
+                                  <template x-for="c in refData.countries" :key="c.code">
+                                    <option :value="c.code" x-text="c.code + ' · ' + c.name"></option>
+                                  </template>
+                                </select>
+                                <button type="button" class="btn btn-ghost btn-xs" title="Clear"
+                                        @click="record.edits[err.col_idx] = ''">
+                                  <i data-lucide="x" class="w-3 h-3"></i>
+                                  Clear
+                                </button>
+                              </div>
+                            </template>
+                            <!-- OVER-LENGTH TEXT: plain input + clear. Truncate
+                                 button removed per feedback — destructive
+                                 one-click shortcut that bypassed SME judgment
+                                 (rephrase vs abbreviate vs genuinely truncate).
+                                 The character counter above the input already
+                                 tells the user how much over they are. -->
+                            <template x-if="errorEditorType(err) === 'length'">
+                              <div class="smart-editor-row">
+                                <input type="text"
+                                       :value="record.edits[err.col_idx] ?? err.value"
+                                       @input="record.edits[err.col_idx] = $event.target.value"
+                                       @keyup.enter.prevent="saveRecord()"
+                                       class="error-item-input"/>
+                                <button type="button" class="btn btn-ghost btn-xs" title="Clear field"
+                                        @click="record.edits[err.col_idx] = ''">
+                                  <i data-lucide="x" class="w-3 h-3"></i>
+                                  Clear
+                                </button>
+                              </div>
+                            </template>
+                            <!-- FALLBACK: plain text input with clear.
+                                 Enter triggers Save (no implicit form). -->
+                            <template x-if="errorEditorType(err) === 'text'">
+                              <div class="smart-editor-row">
+                                <input type="text"
+                                       :value="record.edits[err.col_idx] ?? err.value"
+                                       @input="record.edits[err.col_idx] = $event.target.value"
+                                       @keyup.enter.prevent="saveRecord()"
+                                       class="error-item-input"
+                                       :maxlength="err.ete_length || 200"/>
+                                <button type="button" class="btn btn-ghost btn-xs" title="Clear field"
+                                        @click="record.edits[err.col_idx] = ''">
+                                  <i data-lucide="x" class="w-3 h-3"></i>
+                                  Clear
+                                </button>
+                              </div>
+                            </template>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+
+                  <!-- ALL FIELDS (collapsed unless expanded) -->
+                  <div class="card">
+                    <div class="collapsible-header" @click="record.showAll = !record.showAll">
+                      <div class="card-title">All fields (<span x-text="allFieldCount()"></span>)</div>
+                      <i :data-lucide="record.showAll ? 'chevron-down' : 'chevron-right'" class="w-4 h-4 text-muted"></i>
+                    </div>
+                    <div x-show="record.showAll" class="card-body" style="padding:14px 18px">
+                      <template x-for="[group, fields] in Object.entries(record.data?.groups ?? {})" :key="group">
+                        <div class="mb-4">
+                          <div class="text-[11px] uppercase tracking-wider font-semibold text-muted mb-2" x-text="group"></div>
+                          <div class="field-pair-grid">
+                            <template x-for="field in fields" :key="field.col_idx">
+                              <div class="field-pair">
+                                <div class="field-label">
+                                  <span x-text="field.label"></span>
+                                  <span x-show="field.mandatory" class="mandatory">*</span>
+                                  <!-- v63: hover-tooltip on the red "!" indicator.
+                                       Previously this pill had no title attribute,
+                                       so users saw the red marker but had no way to
+                                       discover WHY the field was flagged without
+                                       leaving the editor and scanning the Decisions
+                                       list. Now backend emits error_messages[] per
+                                       field; we render them as a native title tooltip
+                                       (each message on its own line). Native title is
+                                       used over a custom JS tooltip for accessibility
+                                       (screen readers announce it) and to avoid
+                                       z-index/portal issues with the modal layer. -->
+                                  <span x-show="field.has_error" class="pill pill-danger field-error-pill"
+                                        style="padding:0 4px; font-size:9px; cursor:help"
+                                        :title="(field.error_messages || []).join('\n') || 'This field has a validation error'">!</span>
+                                </div>
+                                <input type="text"
+                                       :value="record.edits[field.col_idx] ?? field.value"
+                                       @input="record.edits[field.col_idx] = $event.target.value"
+                                       :class="field.has_error ? 'ff err ff-mono' : 'ff ff-mono'"
+                                       :maxlength="field.ete_length || 200"/>
+                                <div class="text-[9px] text-dim mt-0.5">
+                                  <span class="font-mono" x-text="field.sap_field"></span>
+                                  · max <span x-text="field.ete_length"></span>
+                                </div>
+                                <!-- v63: inline error message — much more discoverable
+                                     than the hover-only tooltip on the tiny "!" pill.
+                                     Shows directly below the input in red when this
+                                     field has errors. Lists each message on its own
+                                     line so multi-error fields (rare but possible)
+                                     don't blur into one wall of text. -->
+                                <template x-if="field.has_error && field.error_messages && field.error_messages.length">
+                                  <div class="mt-1 space-y-0.5">
+                                    <template x-for="(msg, mi) in field.error_messages" :key="mi">
+                                      <div class="text-[11px] text-danger leading-snug flex items-start gap-1">
+                                        <i data-lucide="alert-triangle" class="w-3 h-3 shrink-0 mt-0.5"></i>
+                                        <span x-text="msg"></span>
+                                      </div>
+                                    </template>
+                                  </div>
+                                </template>
+                              </div>
+                            </template>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      <!-- ─── EXPORT VIEW ─── -->
+      <section x-show="view === 'export'" class="animate-fade-in" x-init="$watch('view', v => { if (v==='export') loadChangesSummary() })">
+        <div class="content-header">
+          <div>
+            <div class="breadcrumb">
+              <a @click="setView('repository')">Repository</a>
+              <span class="sep">/</span>
+              <a @click="setView('dashboard')" x-text="dashboard.filename"></a>
+              <span class="sep">/</span>
+            </div>
+            <h1 class="page-title">Export & Changes</h1>
+            <p class="page-subtitle">Review all modifications before downloading the LTMC-ready file</p>
+          </div>
+
+          <!-- Primary CTAs — top-right of Export header.
+               Always visible, always in the same spot, above the fold.
+               For MM sessions, "Download LTMC XML" calls doExportLtmc() which
+               emits the LTMC-upload-ready SpreadsheetML directly. The
+               secondary "Cleaned xlsx" button (also MM-only) emits the 5-sheet
+               cleaned bundle for SMEs who want to review changes side-by-side
+               before LTMC upload. SD sessions use a single "Download LTMC XML"
+               button that points to doExport() (the original SD XML path). -->
+          <div class="header-actions">
+            <!-- MM: primary LTMC export -->
+            <button type="button" @click="doExportLtmc()"
+                    x-show="dashboard.module === 'MM'"
+                    :class="busyFor('export-ltmc') ? 'btn-busy' : ''"
+                    class="btn btn-primary btn-lg">
+              <span x-show="busyFor('export-ltmc')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export-ltmc')" data-lucide="download" class="w-4 h-4"></i>
+              <span x-text="busyFor('export-ltmc') ? 'Generating…' : 'Download LTMC XML'"></span>
+            </button>
+            <!-- MM: secondary cleaned xlsx export -->
+            <button type="button" @click="doExport()"
+                    x-show="dashboard.module === 'MM'"
+                    :class="busyFor('export') ? 'btn-busy' : ''"
+                    class="btn btn-secondary btn-lg"
+                    title="Download a cleaned xlsx bundle (Summary / Main / AlternateUnits / LongText / ChangeLog) for review before LTMC upload">
+              <span x-show="busyFor('export')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export')" data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+              <span x-text="busyFor('export') ? 'Preparing…' : 'Cleaned xlsx'"></span>
+            </button>
+            <!-- MM: colored review xlsx — separate from the LTMC XML.
+                 Cells with errors are fill-colored by rule; hovering each
+                 cell shows the validator's full message + suggested fix.
+                 The file has a "DO NOT UPLOAD TO SAP" banner because
+                 it's a human-review file, not the SAP-import file. -->
+            <button type="button" @click="doExportReviewXlsx()"
+                    x-show="dashboard.module === 'MM'"
+                    :class="busyFor('export-review') ? 'btn-busy' : ''"
+                    class="btn btn-secondary btn-lg"
+                    style="background:#faf5ff; border-color:#e9d5ff; color:#6b21a8"
+                    title="Download an xlsx with cells colored by error rule. For visual review in Excel — not for SAP import.">
+              <span x-show="busyFor('export-review')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export-review')" data-lucide="palette" class="w-4 h-4"></i>
+              <span x-text="busyFor('export-review') ? 'Coloring…' : 'Review xlsx (colored)'"></span>
+            </button>
+            <!-- PP: BOM LTMC export -->
+            <button type="button" @click="doExportPpBom()"
+                    x-show="dashboard.module === 'PP'"
+                    :class="busyFor('export-pp-bom') ? 'btn-busy' : ''"
+                    class="btn btn-primary btn-lg">
+              <span x-show="busyFor('export-pp-bom')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export-pp-bom')" data-lucide="download" class="w-4 h-4"></i>
+              <span x-text="busyFor('export-pp-bom') ? 'Generating…' : 'Download BOM LTMC XML'"></span>
+            </button>
+            <!-- PP: Routing LTMC export (only when routing data exists) -->
+            <button type="button" @click="doExportPpRouting()"
+                    x-show="dashboard.module === 'PP' && dashboard.pp_stats?.has_routing"
+                    :class="busyFor('export-pp-routing') ? 'btn-busy' : ''"
+                    class="btn btn-primary btn-lg">
+              <span x-show="busyFor('export-pp-routing')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export-pp-routing')" data-lucide="download" class="w-4 h-4"></i>
+              <span x-text="busyFor('export-pp-routing') ? 'Generating…' : 'Download Routing LTMC XML'"></span>
+            </button>
+            <!-- SD: only export option -->
+            <button type="button" @click="doExport()"
+                    x-show="dashboard.module !== 'MM' && dashboard.module !== 'PP'"
+                    :class="busyFor('export') ? 'btn-busy' : ''"
+                    class="btn btn-primary btn-lg">
+              <span x-show="busyFor('export')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export')" data-lucide="download" class="w-4 h-4"></i>
+              <span x-text="busyFor('export') ? 'Preparing…' : 'Download LTMC-ready XML'"></span>
+            </button>
+            <button type="button" @click="markValidatedCurrent()"
+                    x-show="dashboard.pending_errors === 0 && getFileStatus() === 'in_progress' && canValidateCurrent()"
+                    :class="busyFor('validate:'+dashboard.file_id) ? 'btn-busy' : ''"
+                    class="btn btn-success">
+              <span x-show="busyFor('validate:'+dashboard.file_id)" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('validate:'+dashboard.file_id)" data-lucide="check-circle-2" class="w-4 h-4"></i>
+              <span x-text="busyFor('validate:'+dashboard.file_id) ? 'Marking…' : 'Mark as Validated'"></span>
+            </button>
+            <button type="button" @click="closeCurrentFile()"
+                    class="btn btn-ghost btn-icon"
+                    title="Close file and free memory. Your changes are already saved.">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="content-body">
+          <!-- Top row: Summary stats + Warning (if pending) -->
+          <div class="export-grid">
+            <!-- Left: summary card -->
+            <div class="card">
+              <div class="card-header"><span class="card-title">File summary</span></div>
+              <div class="card-body">
+                <div class="grid grid-cols-4 gap-3">
+                  <div>
+                    <div class="kpi-label">Records</div>
+                    <div class="kpi-value stat-num" x-text="dashboard.customer_count?.toLocaleString()"></div>
+                  </div>
+                  <div>
+                    <div class="kpi-label">Sheets</div>
+                    <div class="kpi-value stat-num" x-text="dashboard.sheet_count"></div>
+                  </div>
+                  <div>
+                    <div class="kpi-label">Changes made</div>
+                    <div class="kpi-value stat-num text-brand" x-text="changesSummary?.total?.toLocaleString() ?? '—'"></div>
+                  </div>
+                  <div>
+                    <div class="kpi-label">Pending errors</div>
+                    <div class="kpi-value stat-num"
+                         :class="dashboard.pending_errors > 0 ? 'text-danger' : 'text-success'"
+                         x-text="dashboard.pending_errors?.toLocaleString() ?? '0'"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Warning if unresolved -->
+          <template x-if="dashboard.pending_decisions > 0">
+            <div class="card mb-3" style="border-color:#fde68a; background:#fffbeb">
+              <div class="card-body flex items-start gap-3">
+                <i data-lucide="alert-triangle" class="w-4 h-4 text-warn shrink-0 mt-0.5"></i>
+                <div class="flex-1 text-xs">
+                  <div class="font-semibold text-warn"><span x-text="dashboard.pending_decisions"></span> decision(s) still pending</div>
+                  <div class="text-muted mt-0.5">You can download anyway, but LTMC may reject rows with unresolved errors. Consider resolving first.</div>
+                </div>
+                <button @click="setView('decisions')" class="btn btn-ghost btn-sm">Resolve</button>
+              </div>
+            </div>
+          </template>
+
+          <!-- CHANGES SUMMARY PANEL -->
+          <div class="card mb-3">
+            <div class="card-header flex items-center justify-between gap-2">
+              <div>
+                <span class="card-title">Changes summary</span>
+                <div class="text-xs text-muted mt-0.5">
+                  Every modification made during validation · review before handing to IT
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="text-xs text-muted" x-show="changesSummary?.total > 0">
+                  Showing <span class="tabular font-semibold" x-text="visibleChanges()?.length ?? 0"></span>
+                  of <span class="tabular" x-text="filteredChanges()?.length ?? 0"></span>
+                  <span x-show="(filteredChanges()?.length ?? 0) !== (changesSummary?.total ?? 0)"
+                        class="text-muted">
+                    (filtered from <span class="tabular" x-text="changesSummary?.total ?? 0"></span>)
+                  </span>
+                </div>
+                <button @click="downloadChangesCsv()"
+                        x-show="(changesSummary?.total ?? 0) > 0"
+                        class="btn btn-ghost btn-sm">
+                  <i data-lucide="file-down" class="w-3.5 h-3.5"></i>
+                  Download CSV
+                </button>
+                <button @click="loadChangesSummary()" class="btn btn-ghost btn-icon" title="Refresh">
+                  <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Truncation banner — only shows when the filtered list is
+                 bigger than the visible cap. Tells SMEs they're looking at
+                 a partial render and points them at CSV for the full list,
+                 which is fast (server-side stream, no DOM render). -->
+            <div x-show="(filteredChanges()?.length ?? 0) > CHANGES_VISIBLE_CAP"
+                 class="px-4 py-2 border-b border-amber-200 bg-amber-50 text-xs text-amber-800 flex items-center gap-2">
+              <i data-lucide="info" class="w-4 h-4 shrink-0"></i>
+              <div>
+                Showing the first
+                <span class="tabular font-semibold" x-text="CHANGES_VISIBLE_CAP"></span>
+                rows for performance. The rest are not lost — narrow with the
+                filters above to find a specific edit, or
+                <button @click="downloadChangesCsv()" class="underline font-semibold">
+                  download the full CSV
+                </button>
+                for the complete list.
+              </div>
+            </div>
+
+            <!-- Filter bar -->
+            <div class="px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2 flex-wrap"
+                 x-show="(changesSummary?.total ?? 0) > 0">
+              <input type="text" x-model="changesFilter.search"
+                     placeholder="Search column, row, value, reason..."
+                     class="border rounded px-2 py-1 text-xs" style="min-width:240px">
+              <select x-model="changesFilter.type" class="border rounded px-2 py-1 text-xs">
+                <option value="">All change types</option>
+                <option value="edit">Cell edit</option>
+                <option value="replace_with">Bulk replace</option>
+                <option value="fill_with">Bulk fill</option>
+                <option value="clear_all">Bulk clear</option>
+                <option value="set_urp">Set URP</option>
+                <option value="truncate_all">Truncate</option>
+                <option value="accept">Accepted as-is</option>
+                <option value="delete">Row deleted</option>
+              </select>
+              <select x-model="changesFilter.sheet" class="border rounded px-2 py-1 text-xs">
+                <option value="">All sheets</option>
+                <template x-for="sheet in Object.keys(changesSummary?.by_sheet ?? {})" :key="sheet">
+                  <option :value="sheet" x-text="sheet + ' (' + changesSummary.by_sheet[sheet] + ')'"></option>
+                </template>
+              </select>
+            </div>
+
+            <!-- Changes table -->
+            <div style="max-height:400px; overflow-y:auto">
+              <table class="table table-condensed table-clickable-rows" x-show="(visibleChanges()?.length ?? 0) > 0">
+                <thead style="position:sticky; top:0; z-index:1">
+                  <tr>
+                    <th style="width:90px">Type</th>
+                    <th style="width:140px">Sheet</th>
+                    <th style="width:60px" class="right">Row</th>
+                    <th>Column</th>
+                    <th>Old value</th>
+                    <th>New value</th>
+                    <th style="min-width:150px">Reason</th>
+                    <th style="width:100px">User</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(c, i) in visibleChanges()" :key="i">
+                    <tr @click="jumpToRecordFromChange(c)"
+                        :class="canJumpToRecord(c) ? 'clickable' : 'not-clickable'"
+                        :title="canJumpToRecord(c) ? 'Click to open this row in the Record Editor' : 'Bulk action — no single row to navigate to'">
+                      <td>
+                        <span class="pill" :class="changeTypePillClass(c.type)" x-text="changeTypeLabel(c.type)"></span>
+                      </td>
+                      <td class="text-xs" x-text="c.sheet"></td>
+                      <td class="right tabular text-xs" x-text="c.xml_row || '—'"></td>
+                      <!-- v63: column cell now shows the friendly label AND
+                           the SAP code in the same cell. Example:
+                           "Price ctrl  (VPRSV)". Field code is the small
+                           muted suffix so the friendly name stays primary. -->
+                      <td class="text-xs">
+                        <span x-text="c.column_label || '—'"></span>
+                        <span x-show="c.sap_field && c.sap_field !== c.column_label"
+                              class="text-dim font-mono ml-1"
+                              x-text="'(' + c.sap_field + ')'"></span>
+                      </td>
+                      <td class="mono text-xs text-danger"
+                          :title="c.old_value"
+                          x-text="(c.old_value || '(blank)').substring(0,60)"></td>
+                      <td class="mono text-xs text-success"
+                          :title="c.new_value"
+                          x-text="(c.new_value || '(blank)').substring(0,60)"></td>
+                      <td class="text-xs text-ink-2 italic" :title="c.reason" x-text="c.reason || '—'"></td>
+                      <td class="text-xs text-muted" x-text="c.user"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+
+              <!-- Empty states -->
+              <div x-show="(changesSummary?.total ?? 0) === 0" class="text-center text-muted p-8 text-sm">
+                <i data-lucide="file-check-2" class="w-8 h-8 mx-auto mb-2 text-dim"></i>
+                <div>No changes recorded for this file yet.</div>
+                <div class="text-xs mt-1">Apply decisions or edit records to see them here.</div>
+              </div>
+              <div x-show="(changesSummary?.total ?? 0) > 0 && (filteredChanges()?.length ?? 0) === 0"
+                   class="text-center text-muted p-6 text-sm">
+                No changes match your filter.
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom actions -->
+          <div class="flex gap-2 flex-wrap">
+            <!-- MM: primary LTMC export -->
+            <button @click="doExportLtmc()"
+                    x-show="dashboard.module === 'MM'"
+                    :class="busyFor('export-ltmc') ? 'btn-busy' : ''"
+                    class="btn btn-primary btn-lg">
+              <span x-show="busyFor('export-ltmc')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export-ltmc')" data-lucide="download" class="w-4 h-4"></i>
+              <span x-text="busyFor('export-ltmc') ? 'Generating…' : 'Download LTMC XML'"></span>
+            </button>
+            <!-- MM: secondary cleaned xlsx -->
+            <button @click="doExport()"
+                    x-show="dashboard.module === 'MM'"
+                    :class="busyFor('export') ? 'btn-busy' : ''"
+                    class="btn btn-secondary btn-lg">
+              <span x-show="busyFor('export')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export')" data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+              <span x-text="busyFor('export') ? 'Preparing…' : 'Cleaned xlsx'"></span>
+            </button>
+            <!-- PP: BOM LTMC export -->
+            <button @click="doExportPpBom()"
+                    x-show="dashboard.module === 'PP'"
+                    :class="busyFor('export-pp-bom') ? 'btn-busy' : ''"
+                    class="btn btn-primary btn-lg">
+              <span x-show="busyFor('export-pp-bom')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export-pp-bom')" data-lucide="download" class="w-4 h-4"></i>
+              <span x-text="busyFor('export-pp-bom') ? 'Generating…' : 'Download BOM LTMC XML'"></span>
+            </button>
+            <!-- PP: Routing LTMC export (only when routing data exists) -->
+            <button @click="doExportPpRouting()"
+                    x-show="dashboard.module === 'PP' && dashboard.pp_stats?.has_routing"
+                    :class="busyFor('export-pp-routing') ? 'btn-busy' : ''"
+                    class="btn btn-primary btn-lg">
+              <span x-show="busyFor('export-pp-routing')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export-pp-routing')" data-lucide="download" class="w-4 h-4"></i>
+              <span x-text="busyFor('export-pp-routing') ? 'Generating…' : 'Download Routing LTMC XML'"></span>
+            </button>
+            <!-- SD: single export (now scoped to SD only — PP and MM have their own) -->
+            <button @click="doExport()"
+                    x-show="dashboard.module !== 'MM' && dashboard.module !== 'PP'"
+                    :class="busyFor('export') ? 'btn-busy' : ''"
+                    class="btn btn-primary btn-lg">
+              <span x-show="busyFor('export')" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('export')" data-lucide="download" class="w-4 h-4"></i>
+              <span x-text="busyFor('export') ? 'Preparing…' : 'Download LTMC XML'"></span>
+            </button>
+            <button @click="markValidatedCurrent()"
+                    x-show="dashboard.pending_errors === 0 && getFileStatus() === 'in_progress' && canValidateCurrent()"
+                    :class="busyFor('validate:'+dashboard.file_id) ? 'btn-busy' : ''"
+                    class="btn btn-success btn-lg">
+              <span x-show="busyFor('validate:'+dashboard.file_id)" class="inline-spinner inline-spinner-sm"></span>
+              <i x-show="!busyFor('validate:'+dashboard.file_id)" data-lucide="check-circle-2" class="w-4 h-4"></i>
+              <span x-text="busyFor('validate:'+dashboard.file_id) ? 'Marking…' : 'Mark as Validated'"></span>
+            </button>
+            <button @click="setView('dashboard')" class="btn btn-ghost">Back to dashboard</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── DOCUMENTATION VIEW ─── -->
+      <section x-show="view === 'docs'" class="animate-fade-in">
+        <div class="content-header">
+          <div>
+            <h1 class="page-title">Documentation</h1>
+            <p class="page-subtitle">Standard Operating Procedures, validation logic, and LTMC export reference</p>
+          </div>
+        </div>
+        <div class="content-body" style="max-width:920px">
+
+          <!-- ── External PDFs ───────────────────────────── -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <span class="card-title">Reference Documents</span>
+            </div>
+            <div class="card-body">
+              <div class="flex items-start gap-4 mb-4">
+                <div class="w-10 h-10 rounded bg-blue-50 flex items-center justify-center shrink-0">
+                  <i data-lucide="file-text" class="w-5 h-5 text-brand"></i>
+                </div>
+                <div class="flex-1">
+                  <h3 class="text-sm font-semibold text-ink mb-1">Standard Operating Procedure</h3>
+                  <p class="text-xs text-muted mb-2">Step-by-step guide for SMEs covering upload, validation, decision making, and export.</p>
+                  <a href="/static/docs/SOP.pdf" target="_blank" class="btn btn-primary btn-sm">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    Download SOP (PDF)
+                  </a>
+                </div>
+              </div>
+              <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded bg-purple-50 flex items-center justify-center shrink-0">
+                  <i data-lucide="book-open" class="w-5 h-5 text-purple-700"></i>
+                </div>
+                <div class="flex-1">
+                  <h3 class="text-sm font-semibold text-ink mb-1">Validation Rules Reference</h3>
+                  <p class="text-xs text-muted mb-2">Complete catalog of the validation rules, what triggers each, and the remediation strategy.</p>
+                  <a href="/static/docs/BusinessRules.pdf" target="_blank" class="btn btn-primary btn-sm">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    Download Business Rules (PDF)
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Workflow ────────────────────────────────── -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <span class="card-title">End-to-End Workflow</span>
+            </div>
+            <div class="card-body">
+              <ol class="text-sm text-ink" style="padding-left:1.25rem; line-height:1.7">
+                <li><b>Upload</b> — drag &amp; drop input files. SD: a single XML. MM: three xlsx files (Main, Alternate UoM, Long Text). The system detects file types automatically and runs structural checks before parsing.</li>
+                <li><b>Parse + Merge</b> — the loader reads all rows in seconds (Rust-backed calamine path), then the merger groups rows by MATNR. For MM, multi-plant materials are detected (same MATNR appearing at multiple WERKS) and tracked as a single material with a list of plant rows.</li>
+                <li><b>Validate</b> — every material is checked against the rule catalogue (47 MM rules, ~30 SD rules). Each failure produces an Error object tagged with the row, column, rule, severity, and a suggested fix where the rule can derive one.</li>
+                <li><b>Group into Decisions</b> — errors are clustered: when many rows have the same problem with the same value, they collapse into one "pattern" Decision. Otherwise the rule produces "individual" Decisions (one per affected row).</li>
+                <li><b>Resolve</b> — for each Decision, SMEs can either:<br>
+                  <span class="ml-2">— <b>Group &amp; Replace</b>: pick from a KDS-backed dropdown (or type a value) to update every matching cell at once.</span><br>
+                  <span class="ml-2">— <b>Fix Individually</b>: edit each row by hand in the record editor.</span>
+                </li>
+                <li><b>Export</b> — for MM, two output options:<br>
+                  <span class="ml-2">— <b>LTMC XML</b>: directly upload-ready SpreadsheetML matching HML's LTMC template byte-for-byte. Use this for the actual SAP migration.</span><br>
+                  <span class="ml-2">— <b>Cleaned xlsx</b>: 5-sheet bundle (Summary / Main / AlternateUnits / LongText / ChangeLog) for review-before-upload.</span>
+                </li>
+              </ol>
+            </div>
+          </div>
+
+          <!-- ── MM Validation Rule Categories ───────────── -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <span class="card-title">MM Validation Rule Categories</span>
+            </div>
+            <div class="card-body">
+              <p class="text-xs text-muted mb-3">47 rules across 8 categories. The validator iterates the catalogue once per material; rules that depend on missing KDS catalogs stay dormant rather than firing false positives.</p>
+              <table class="table" style="font-size:13px">
+                <thead>
+                  <tr>
+                    <th style="width:18ch">Category</th>
+                    <th>Triggers when…</th>
+                    <th style="width:24ch">Example rule</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="font-semibold">Mandatory</td>
+                    <td>A required SAP field is blank.</td>
+                    <td class="mono text-xs">mm_base_unit_missing (MEINS)</td>
+                  </tr>
+                  <tr>
+                    <td class="font-semibold">Max length</td>
+                    <td>A field exceeds its SAP-defined width.</td>
+                    <td class="mono text-xs">mm_description_too_long (MAKTX &gt; 40)</td>
+                  </tr>
+                  <tr>
+                    <td class="font-semibold">Exact value</td>
+                    <td>A field doesn't match HML's required value (e.g. "must always be X").</td>
+                    <td class="mono text-xs">mm_industry_sector_must_be_H (MBRSH)</td>
+                  </tr>
+                  <tr>
+                    <td class="font-semibold">KDS lookup</td>
+                    <td>The value isn't in the reference catalog (Plant, Material Group, EXTWG, EKGRP, etc.).</td>
+                    <td class="mono text-xs">mm_matgroup_not_in_kds (MATKL)</td>
+                  </tr>
+                  <tr>
+                    <td class="font-semibold">KDS nested lookup</td>
+                    <td>The value is valid in the catalog but not in the current scope (e.g. an LGORT not approved at this WERKS).</td>
+                    <td class="mono text-xs">mm_storage_loc_not_in_kds (LGORT × WERKS)</td>
+                  </tr>
+                  <tr>
+                    <td class="font-semibold">MATNR range</td>
+                    <td>Material number doesn't match the MTART's allowed range (numeric vs alphanumeric, length).</td>
+                    <td class="mono text-xs">mm_matnr_range_mismatch</td>
+                  </tr>
+                  <tr>
+                    <td class="font-semibold">Conditional mandatory</td>
+                    <td>Field A is required only when Field B has a specific value.</td>
+                    <td class="mono text-xs">mm_inhouse_prod_time_missing (DZEIT required when MTART ∈ in-house types)</td>
+                  </tr>
+                  <tr>
+                    <td class="font-semibold">LTMC default</td>
+                    <td>A field that LTMC requires but the source xlsx doesn't carry — system suggests the standard default.</td>
+                    <td class="mono text-xs">mm_ltmc_language_missing (SPRAS → EN)</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="text-xs text-muted mt-3">
+                <b>Severity:</b>
+                <span class="pill pill-neutral mx-1">error</span> blocks LTMC migration —
+                <span class="pill pill-neutral mx-1">warning</span> flagged for review but can ship as-is.
+              </p>
+            </div>
+          </div>
+
+          <!-- ── Multi-Plant Handling ────────────────────── -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <span class="card-title">Multi-Plant Materials</span>
+            </div>
+            <div class="card-body">
+              <p class="text-sm text-ink mb-2">
+                The same MATNR can appear at multiple plants in the source file (e.g. one item stocked at PE01, SP01-SP09, and WH01 — 11 plant rows). The merger detects this and keeps a single material record with a list of plant rows.
+              </p>
+              <p class="text-sm text-ink mb-2">
+                <b>Plant-scoped fields</b> — values can differ per plant; the validator and export emit one row per plant for these:
+              </p>
+              <p class="text-xs mono text-ink mb-3 ml-3">WERKS · LGORT · LGPRO · DISPO · FEVOR · BWKEY</p>
+              <p class="text-sm text-ink mb-2">
+                <b>True duplicates</b> — same MATNR <i>and</i> same WERKS appearing twice are detected and the second occurrence is dropped (with a warning shown on the dashboard). 1-MATNR-N-plants is normal; same-MATNR-same-WERKS is data entry error.
+              </p>
+              <p class="text-sm text-ink">
+                <b>Group &amp; Replace at scale</b> — a single bulk fix for a plant-scoped field (e.g. clearing a bad LGPRO value) automatically reaches every affected plant row across every multi-plant material. On the Peenya FG file (10,565 materials × 11 plants = 24,575 plant rows), one G&amp;R operation completes in ~3 seconds.
+              </p>
+            </div>
+          </div>
+
+          <!-- ── LTMC Export Structure ───────────────────── -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <span class="card-title">LTMC XML Export Structure</span>
+            </div>
+            <div class="card-body">
+              <p class="text-sm text-ink mb-3">
+                The exporter loads HML's filled-in LTMC template from disk and patches data rows into each sheet's data section. <b>Everything else passes through unchanged</b> — styles, freeze panes, column widths, worksheet protection, document properties, color formatting all preserved byte-for-byte.
+              </p>
+              <p class="text-sm text-ink mb-2"><b>11 sheets populated for an FG material:</b></p>
+              <table class="table" style="font-size:13px">
+                <thead>
+                  <tr>
+                    <th>Sheet</th>
+                    <th>Rows per material</th>
+                    <th>Source / default</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>Basic Data</td><td>1</td><td>Source main + HML defaults (DATAB, GEWEI, BRGEW, NTGEW, XGCHP, SLED_BBD, RDMHD)</td></tr>
+                  <tr><td>Additional Descriptions</td><td>1 per long-text row</td><td>Source longtext.BASE_TEXT (truncated to 40 chars)</td></tr>
+                  <tr><td>Alternative Units of Measure</td><td>1 per alt-uom row</td><td>Source alt-uom file</td></tr>
+                  <tr><td>Class Data</td><td>1</td><td>Healthium-wide: CLASS=SUTURES_CLASS, CLASSTYPE=023</td></tr>
+                  <tr><td>Distribution Chains</td><td>1</td><td>Source main: VKORG, VTWEG, SKTOF, MTPOS, KTGRM</td></tr>
+                  <tr><td>Point of Sale Data</td><td>1</td><td>VKORG/VTWEG + RBZUL=X</td></tr>
+                  <tr><td>Tax Classification</td><td>1</td><td>India GST: 8 (TATYP, TAXM) pairs — JOCG/JOSG/JOIG/JOUG/JTC1-4</td></tr>
+                  <tr><td>Plant Data</td><td>1 per plant</td><td>Source main + plant_row + HML defaults (MTVFP=02, PRCTR=10020402, TAXIM=X, GI_PR_TIME=2)</td></tr>
+                  <tr><td>Storage Locations</td><td>1 per plant</td><td>WERKS + LGORT (mapped from source LGPRO)</td></tr>
+                  <tr><td>Inspection Setup Data</td><td>2 per plant</td><td>HML scheme: ART=04 (GR for FG) + ART=01 (in-process), both APA=X AKTIV=X</td></tr>
+                  <tr><td>Valuation Data</td><td>1 per plant</td><td>BWKEY derived from KDS plant→valuation-area map (PE01→1010, etc.)</td></tr>
+                </tbody>
+              </table>
+              <p class="text-xs text-muted mt-3">
+                For the Peenya FG file (10,565 materials × 11 plants), the export produces a 121 MB XML file with 24,575 Plant Data rows, 24,575 Valuation Data rows, 49,150 Inspection Setup rows (2× plant-rows for the dual ART scheme), and so on. Generation takes ~10 seconds end-to-end via the HTTP endpoint.
+              </p>
+            </div>
+          </div>
+
+          <!-- ── KDS Reference Catalogs ──────────────────── -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <span class="card-title">KDS Reference Catalogs</span>
+            </div>
+            <div class="card-body">
+              <p class="text-sm text-ink mb-3">
+                Validation lookups source from the KDS workbook (bundled in the deployment). Each catalog backs one or more validator rules; rules whose catalog is empty stay dormant rather than failing.
+              </p>
+              <table class="table" style="font-size:13px">
+                <thead>
+                  <tr>
+                    <th>Catalog</th>
+                    <th>Used by</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>Plants &amp; BWKEY</td><td>Plant validation, BWKEY derivation in Valuation Data export</td><td><span class="pill pill-neutral">loaded</span></td></tr>
+                  <tr><td>Material Type (MTART)</td><td>MATNR-range validation per type</td><td><span class="pill pill-neutral">loaded</span></td></tr>
+                  <tr><td>Material Group (MATKL)</td><td>MATKL value validation</td><td><span class="pill pill-neutral">loaded</span></td></tr>
+                  <tr><td>External Material Group (EXTWG)</td><td>EXTWG value validation</td><td><span class="pill pill-neutral">loaded</span></td></tr>
+                  <tr><td>Purchasing Group (EKGRP)</td><td>EKGRP value validation</td><td><span class="pill pill-neutral">loaded</span></td></tr>
+                  <tr><td>Storage Location (LGORT × WERKS)</td><td>Nested lookup — LGORT must be approved for the specific plant</td><td><span class="pill pill-neutral">loaded</span></td></tr>
+                  <tr><td>Valuation Class Mapping (BKLAS by MTART)</td><td>Valuation class consistency</td><td><span class="pill pill-neutral">loaded</span></td></tr>
+                  <tr><td>Purchasing Org</td><td>Purchasing org validation</td><td><span class="pill pill-neutral">loaded</span></td></tr>
+                  <tr><td>Division, Profit Center, MRP Controller, Strategy Group, Production Supervisor, Scheduling Profile</td><td>Field validation</td><td><span class="pill pill-warning">awaiting HML SAP team data</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ── System Characteristics ──────────────────── -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <span class="card-title">System Characteristics</span>
+            </div>
+            <div class="card-body">
+              <table class="table" style="font-size:13px">
+                <thead>
+                  <tr>
+                    <th>Materials</th>
+                    <th>Load</th>
+                    <th>Validate</th>
+                    <th>LTMC export</th>
+                    <th>Peak memory</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>10k (Peenya FG, real)</td><td>4s</td><td>3s</td><td>10s, 121 MB</td><td>1.4 GB</td></tr>
+                  <tr><td>25k (synthetic)</td><td>7s</td><td>19s</td><td>~25s</td><td>1.4 GB</td></tr>
+                  <tr><td>50k (synthetic)</td><td>5s</td><td>25s</td><td>~50s</td><td>2.85 GB</td></tr>
+                  <tr><td>100k (projected)</td><td>~10s</td><td>~75s</td><td>~100s</td><td>~5.7 GB</td></tr>
+                </tbody>
+              </table>
+              <p class="text-xs text-muted mt-3">
+                Production server (t3a.large, 8 GB RAM) handles up to 100k materials. The fast loader (Rust-backed python-calamine) is ~14× faster than openpyxl for the parse step; openpyxl is the fallback if calamine isn't installed.
+              </p>
+            </div>
+          </div>
+
+          <!-- ── Audit & Traceability ────────────────────── -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <span class="card-title">Audit Trail</span>
+            </div>
+            <div class="card-body">
+              <p class="text-sm text-ink mb-2">
+                Every edit applied during a session is recorded in the audit log with: timestamp, username, action type (group_replace, edit_cell, etc.), rule, MATNR, WERKS, SAP field, old value, new value, business reason.
+              </p>
+              <p class="text-sm text-ink mb-2">
+                <b>Cleaned xlsx export</b> includes the full audit log as a "ChangeLog" sheet — every edit traceable to who made it, when, and why.
+              </p>
+              <p class="text-sm text-ink">
+                Bulk operations (Group &amp; Replace, bulk delete) require a non-empty business reason before they run.
+              </p>
+            </div>
+          </div>
+
+          <!-- ── Recent Updates ──────────────────────────── -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Recent Updates</span>
+            </div>
+            <div class="card-body" style="font-size:13px">
+              <div class="mb-3">
+                <span class="pill pill-brand">v44</span>
+                <span class="text-ink ml-2">Fixed misleading "MM upload failed" toast on successful uploads. Cosmetic bug in the success-toast composer that fired the error catch even when the upload succeeded.</span>
+              </div>
+              <div class="mb-3">
+                <span class="pill pill-brand">v43</span>
+                <span class="text-ink ml-2">Memory optimization: <code>__slots__</code> on Error/Decision dataclasses. ~60 MB saved on 50k stress test (1.29M error objects).</span>
+              </div>
+              <div class="mb-3">
+                <span class="pill pill-brand">v42</span>
+                <span class="text-ink ml-2">Critical LTMC export fix — 6 sheets (Plant Data, Tax Classification, Class Data, Distribution Chains, Point of Sale Data, Alternative Units of Measure) were silently emitting only 1 row at scale due to a regex that didn't match worksheets with <code>ss:Protected="1"</code> attribute. Now all 11 sheets populate correctly.</span>
+              </div>
+              <div class="mb-3">
+                <span class="pill pill-brand">v41</span>
+                <span class="text-ink ml-2">Phase 3 LTMC XML export: template-based generator + endpoint + UI button. Output is the LTMC-upload-ready file SAP imports directly, with all template formatting preserved.</span>
+              </div>
+              <div class="mb-3">
+                <span class="pill pill-brand">v40</span>
+                <span class="text-ink ml-2">Real-data verification on Peenya FG. Two bugs found and fixed: (1) preview only showed PE01 plants for multi-plant decisions, (2) BWKEY Group &amp; Replace touched only main, not plant_rows. Now all 11 plants represented evenly in preview.</span>
+              </div>
+              <div class="mb-3">
+                <span class="pill pill-brand">v39</span>
+                <span class="text-ink ml-2">14× faster loader (python-calamine fast path), distinct col_idx for LTMC default fields (fixing record-editor field collisions), upload progress animation during server-side parsing.</span>
+              </div>
+              <p class="text-xs text-muted mt-3">
+                See <code>CHANGELOG.md</code> in the deployment for the full version history.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── ADMIN USERS VIEW ─── -->
+      <section x-show="view === 'admin_users'" class="animate-fade-in">
+        <div class="content-header">
+          <div>
+            <h1 class="page-title">User Management</h1>
+            <p class="page-subtitle">Create users, assign modules, reset passwords</p>
+          </div>
+          <button @click="openCreateUserModal()" class="btn btn-primary">
+            <i data-lucide="user-plus" class="w-4 h-4"></i>
+            Create User
+          </button>
+        </div>
+        <div class="content-body">
+          <div class="card">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Display Name</th>
+                  <th>Role</th>
+                  <th>Module</th>
+                  <th>Created</th>
+                  <th class="right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="u in admin.users" :key="u.username">
+                  <tr>
+                    <td class="mono font-semibold text-ink" x-text="u.username"></td>
+                    <td x-text="u.display_name"></td>
+                    <td><span class="pill pill-neutral" x-text="u.role"></span></td>
+                    <td>
+                      <span x-show="u.module" class="pill pill-brand" x-text="u.module"></span>
+                      <span x-show="!u.module" class="text-dim">—</span>
+                    </td>
+                    <td class="text-xs text-muted" x-text="formatTime(u.created_at)"></td>
+                    <td class="right">
+                      <button @click="openChangeRoleModal(u.username, u.role, u.module)"
+                              x-show="u.username !== 'admin'"
+                              class="btn btn-ghost btn-xs">Change role</button>
+                      <button @click="openChangePwModal(u.username)" class="btn btn-ghost btn-xs">Change password</button>
+                      <button x-show="u.username !== 'admin'" @click="deleteUser(u.username)" class="btn btn-danger btn-xs">Delete</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── ADMIN AUDIT TRAIL ─── -->
+      <section x-show="view === 'admin_audit'" class="animate-fade-in">
+        <div class="content-header">
+          <div>
+            <h1 class="page-title">Audit Trail</h1>
+            <p class="page-subtitle">Every action across the system · newest first</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select x-model="audit.filterAction" class="ff" style="width:180px">
+              <option value="">All actions</option>
+              <option value="file_upload">File uploaded</option>
+              <option value="mark_validated">Marked validated</option>
+              <option value="revoke_validation">Validation revoked</option>
+              <option value="mark_ltmc_uploaded">LTMC uploaded</option>
+              <option value="file_deleted">File deleted</option>
+              <option value="delete_row">Row deleted</option>
+              <option value="edit_cell">Cell edited</option>
+              <option value="user_deleted">User deleted</option>
+            </select>
+            <select x-model="audit.filterUser" class="ff" style="width:140px">
+              <option value="">All users</option>
+              <template x-for="u in audit.uniqueUsers()" :key="u">
+                <option :value="u" x-text="u"></option>
+              </template>
+            </select>
+            <input x-model="audit.filterSearch" type="text" placeholder="Search file/sheet…" class="ff" style="width:200px"/>
+            <button @click="loadAdminAudit()" class="btn btn-ghost" title="Refresh">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div class="content-body">
+          <div class="card">
+            <div class="card-body-flush" style="overflow-x:auto">
+              <table class="table table-condensed">
+                <thead>
+                  <tr>
+                    <th style="width:140px">When</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>File</th>
+                    <th>Module</th>
+                    <th>Sheet</th>
+                    <th class="right">Rows</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(e, i) in audit.filteredEntries()" :key="i">
+                    <tr @click="jumpToRecordFromAudit(e)"
+                        :class="canJumpToRecordFromAudit(e) ? 'clickable' : 'not-clickable'"
+                        :title="canJumpToRecordFromAudit(e) ? 'Click to open this row in the Record Editor' : 'Bulk or non-navigable action'">
+                      <td class="text-muted text-xs" x-text="formatTimeExact(e.timestamp)"></td>
+                      <td>
+                        <div class="flex items-center gap-2">
+                          <div class="user-avatar shrink-0" style="width:20px;height:20px;font-size:9px" x-text="e.display_name?.substring(0,2)?.toUpperCase()"></div>
+                          <div>
+                            <div class="text-xs font-medium text-ink" x-text="e.display_name"></div>
+                            <div class="text-[10px] text-muted" x-text="e.role"></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td><span :class="auditActionPillClass(e.action)" class="pill" x-text="formatActionLabel(e.action)"></span></td>
+                      <td class="mono text-xs" x-text="e.filename ?? '—'"></td>
+                      <td>
+                        <span x-show="e.module" class="pill pill-neutral" x-text="e.module"></span>
+                        <span x-show="!e.module" class="text-dim">—</span>
+                      </td>
+                      <td class="text-xs" x-text="e.sheet ?? '—'"></td>
+                      <td class="right tabular" x-text="e.affected_count || '—'"></td>
+                      <td class="text-xs text-muted" style="max-width:220px" x-text="e.reason || '—'"></td>
+                    </tr>
+                  </template>
+                  <template x-if="audit.filteredEntries().length === 0">
+                    <tr>
+                      <td colspan="8" class="text-center text-muted text-xs" style="padding:24px">No entries match the filters.</td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ═══ MODAL: UPLOAD FILE ═══
+       Two flows inside one modal, switched by modal.module:
+         - SD → single-file drop zone (unchanged)
+         - MM → three labelled slots (Main / Alt UoM / Long Text) with
+                live format-check ticks + template download buttons
+       The user picks the module first; the body rerenders accordingly.
+  -->
+  <!-- ── v66: Cross-file decision guidance modal ────────────────────
+       Shown when the SME clicks "Fix individually" on a decision whose
+       errors live in the Alt UoM or Long Text source file (sheet =
+       AlternateUnits / LongText). The Records editor has no way to
+       open or edit those rows — the only fix is editing the source
+       xlsx in Excel and re-uploading. This modal explains the fix
+       step-by-step and lists the affected MATNRs/values so the SME
+       knows exactly what to look for. -->
+  <div x-show="crossFileModal.open" class="modal-backdrop"
+       @click.self="closeCrossFileModal()" style="display:none">
+    <div class="modal animate-slide-up" style="max-width:720px">
+      <div class="modal-header">
+        <div class="card-title text-base">
+          Fix in source file:
+          <span x-text="crossFileModal.fileLabel"></span>
+        </div>
+        <button @click="closeCrossFileModal()" class="btn btn-ghost btn-icon" title="Close">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div class="modal-body space-y-4">
+        <!-- Why we can't fix in-app -->
+        <div class="p-3 bg-blue-50 border border-blue-200 rounded text-xs leading-relaxed text-blue-900">
+          <div class="font-semibold mb-1">Why this can't be fixed in the Records editor</div>
+          This error is in your <b><span x-text="crossFileModal.fileLabel"></span> file</b>, not in the
+          main material file. The Records editor only shows main-file data. To fix this, edit your
+          <b><span x-text="crossFileModal.fileLabel"></span></b> xlsx in Excel and re-upload all three
+          files together.
+        </div>
+
+        <!-- The actual error -->
+        <div>
+          <div class="text-[11px] uppercase tracking-wider font-semibold text-muted mb-1">What's wrong</div>
+          <div class="text-sm" x-text="crossFileModal.decision?.rule_name"></div>
+          <div class="text-xs text-muted mt-0.5">
+            <span x-text="crossFileModal.totalCount"></span>
+            row<span x-show="crossFileModal.totalCount !== 1">s</span> affected
+            in the <span x-text="crossFileModal.fileLabel"></span> file.
+          </div>
+        </div>
+
+        <!-- Affected rows table -->
+        <div x-show="crossFileModal.rows && crossFileModal.rows.length">
+          <div class="text-[11px] uppercase tracking-wider font-semibold text-muted mb-1">Affected rows</div>
+          <div class="border border-gray-200 rounded" style="max-height:240px; overflow-y:auto">
+            <table class="table table-condensed" style="margin:0">
+              <thead style="position:sticky; top:0; background:#f9fafb">
+                <tr>
+                  <th style="width:60px">Excel row</th>
+                  <th>MATNR</th>
+                  <th>Field</th>
+                  <th>Current value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(r, i) in crossFileModal.rows" :key="i">
+                  <tr>
+                    <td class="tabular text-xs text-muted" x-text="r.xml_row ?? '—'"></td>
+                    <td class="font-mono text-xs" x-text="r.matnr ?? '—'"></td>
+                    <td class="text-xs" x-text="r.column_label ?? r.sap_field ?? '—'"></td>
+                    <td class="font-mono text-xs" x-text="r.value || '(blank)'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="crossFileModal.totalCount > crossFileModal.rows.length"
+               class="text-[11px] text-muted mt-1">
+            Showing first <span x-text="crossFileModal.rows.length"></span> of
+            <span x-text="crossFileModal.totalCount"></span> affected rows.
+          </div>
+        </div>
+
+        <!-- Fix steps -->
+        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs leading-relaxed text-emerald-900">
+          <div class="font-semibold mb-1">How to fix</div>
+          <ol class="list-decimal pl-4 space-y-0.5">
+            <li>Open your <b><span x-text="crossFileModal.fileLabel"></span></b> xlsx file in Excel</li>
+            <li>Find each row listed above (use the Excel row number column)</li>
+            <li>Update the field shown to a valid value (see the error message for what's expected)</li>
+            <li>Save the file</li>
+            <li>Return to the Repository page and re-upload all 3 files (main + alt UoM + long text) together</li>
+          </ol>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button @click="closeCrossFileModal()" class="btn btn-ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="modal.type === 'upload'" class="modal-backdrop" @click.self="closeModal()" style="display:none">
+    <div class="modal animate-slide-up" :style="(modal.module === 'MM' || modal.module === 'PP') ? 'max-width:720px' : ''">
+      <div class="modal-header">
+        <div class="card-title text-base">Upload file<span x-show="modal.module === 'MM' || modal.module === 'PP'">s</span> to repository</div>
+      </div>
+      <div class="modal-body space-y-4">
+        <div>
+          <label class="field-label">Module</label>
+          <select x-model="modal.module" @change="onUploadModuleChange()" class="ff">
+            <template x-for="m in modules.filter(x => x.accessible)" :key="m.code">
+              <option :value="m.code" :disabled="m.code !== 'SD' && m.code !== 'MM' && m.code !== 'PP'"
+                      x-text="(
+                        m.code === 'SD' ? m.code + ' — Customer Master' :
+                        m.code === 'MM' ? m.code + ' — Material Master' :
+                        m.code === 'PP' ? m.code + ' — BOM + Routing' :
+                        m.code + ' — Coming Soon'
+                      )"></option>
+            </template>
+          </select>
+          <p class="text-[11px] text-muted mt-1">
+            SD (Customer Master), MM (Material Master), and PP (BOM + Routing) are active. QM, FICO on the roadmap.
+          </p>
+        </div>
+
+        <!-- ── SD flow: single-file drop zone (unchanged behavior) ── -->
+        <template x-if="modal.module === 'SD'">
+          <div class="dropzone"
+               @dragover.prevent="modal.dragOver = true"
+               @dragleave.prevent="modal.dragOver = false"
+               @drop.prevent="handleUploadDrop($event)"
+               :class="modal.dragOver ? 'drag-over' : ''">
+            <template x-if="!modal.uploading">
+              <div>
+                <i data-lucide="file-up" class="w-8 h-8 text-brand mx-auto mb-2"></i>
+                <div class="font-semibold text-ink text-sm mb-1">Drop file here</div>
+                <div class="text-xs text-muted mb-3">Supports .xml and .xlsx · up to 100 MB comfortably</div>
+                <label class="btn btn-primary btn-sm cursor-pointer">
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                  Choose file
+                  <input type="file" accept=".xml,.xlsx" @change="handleUploadFile($event.target.files[0])"/>
+                </label>
+              </div>
+            </template>
+            <template x-if="modal.uploading">
+              <div class="text-left">
+                <div class="flex items-center justify-between mb-1">
+                  <div class="text-xs font-medium text-ink" x-text="modal.uploadStatus"></div>
+                  <div class="text-xs text-muted tabular" x-text="Math.round(modal.uploadProgress) + '%'"></div>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-fill" :style="`width:${modal.uploadProgress}%`"></div>
+                </div>
+                <div class="text-[11px] text-muted mt-2" x-text="modal.uploadDetail"></div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- ── MM flow: 3 labelled slots (Main required; Alt UoM and ── -->
+        <!-- ── Long Text optional) + template downloads.            ── -->
+        <template x-if="modal.module === 'MM'">
+          <div class="space-y-3">
+            <!-- v62: LTMC source data form (XML) upload mode banner.
+                 Users can upload either the customer's flat 2-row-header
+                 xlsx (existing) OR SAP's canonical LTMC source data form
+                 XML (new). The XML carries ~29 sheets (Basic Data, Plant
+                 Data, Distribution Chains, etc.) and is what SAP's LTMC
+                 migration cockpit ultimately ingests. We auto-detect by
+                 file extension + SpreadsheetML 2003 marker and route
+                 through mm_ltmc_form_loader. -->
+            <div class="p-3 rounded" style="background:#eff6ff; border:1px solid #bfdbfe">
+              <div class="flex items-start gap-2">
+                <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5" style="color:#1d4ed8"></i>
+                <div class="flex-1">
+                  <div class="text-xs font-semibold" style="color:#1e3a8a">Two formats supported for the Main slot</div>
+                  <div class="text-[11px] text-muted">
+                    <strong>Customer xlsx</strong> — flat 2-row-header (row 1 friendly label, row 2 SAP code, row 3+ data) ·
+                    <strong>SAP LTMC source data form (.xml)</strong> — the 29-sheet canonical SAP template.
+                    Either is auto-detected. When uploading the LTMC form, Alt UoM and Long Text are read from its
+                    own sheets — those slots can stay empty.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Templates banner -->
+            <div class="p-3 rounded" style="background:#faf5ff; border:1px solid #e9d5ff">
+              <div class="flex items-start gap-2">
+                <i data-lucide="download-cloud" class="w-4 h-4 shrink-0 mt-0.5" style="color:#7e22ce"></i>
+                <div class="flex-1">
+                  <div class="text-xs font-semibold" style="color:#6b21a8">Need the templates?</div>
+                  <div class="text-[11px] text-muted mb-2">Download blank copies to prepare your data. Row 1 = friendly label, row 2 = SAP code (do not edit), row 3+ = your data.</div>
+                  <div class="flex gap-2 flex-wrap">
+                    <a href="/api/mm/template/main" class="btn btn-ghost btn-xs">
+                      <i data-lucide="file-spreadsheet" class="w-3 h-3"></i>Main Template
+                    </a>
+                    <a href="/api/mm/template/alt_uom" class="btn btn-ghost btn-xs">
+                      <i data-lucide="file-spreadsheet" class="w-3 h-3"></i>Alt UoM Template
+                    </a>
+                    <a href="/api/mm/template/longtext" class="btn btn-ghost btn-xs">
+                      <i data-lucide="file-spreadsheet" class="w-3 h-3"></i>Long Text Template
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3 slots (component-rendered) -->
+            <template x-for="slot in ['main', 'alt_uom', 'longtext']" :key="slot">
+              <div class="mm-slot" :class="modal.mm?.[slot]?.status || 'empty'">
+                <div class="mm-slot-header">
+                  <div>
+                    <div class="mm-slot-title" x-text="({
+                      main: 'Main Material Data',
+                      alt_uom: 'Alternate Units of Measure',
+                      longtext: 'Long Text'
+                    })[slot]"></div>
+                    <div class="mm-slot-subtitle" x-text="({
+                      main: '~150 fields per material · MATNR + MBRSH + material attributes',
+                      alt_uom: 'Alternate UoM conversions · MATNR + MEINH + UMREZ + UMREN',
+                      longtext: 'Per-material long texts · MATNR + BASE_TEXT/PO_TEXT/SALES_TEXT'
+                    })[slot]"></div>
+                  </div>
+                  <!-- Status pill -->
+                  <span class="mm-slot-status" :class="modal.mm?.[slot]?.status || 'empty'">
+                    <template x-if="!modal.mm?.[slot] || modal.mm[slot].status === 'empty'">
+                      <!-- Main is required; Alt UoM and Long Text are optional.
+                           SMEs commonly start with just the Main material file
+                           and add the others later. -->
+                      <span x-text="slot === 'main' ? 'Required' : 'Optional'"></span>
+                    </template>
+                    <template x-if="modal.mm?.[slot]?.status === 'checking'">
+                      <span class="flex items-center gap-1">
+                        <span class="inline-spinner inline-spinner-sm"></span>Checking…
+                      </span>
+                    </template>
+                    <template x-if="modal.mm?.[slot]?.status === 'ok'">
+                      <span class="flex items-center gap-1">
+                        <i data-lucide="check-circle-2" class="w-3 h-3"></i>OK
+                      </span>
+                    </template>
+                    <template x-if="modal.mm?.[slot]?.status === 'bad'">
+                      <span class="flex items-center gap-1">
+                        <i data-lucide="x-circle" class="w-3 h-3"></i>Wrong format
+                      </span>
+                    </template>
+                  </span>
+                </div>
+                <div class="mm-slot-body">
+                  <!-- Empty: show picker button.
+                       Main slot accepts .xlsx (customer source format) OR
+                       .xml (SAP LTMC source data form — the canonical 29-
+                       sheet template SAP S/4HANA's LTMC migration cockpit
+                       uses). Backend's mm_ltmc_form_loader auto-detects
+                       the LTMC form via SpreadsheetML 2003 markers and
+                       routes through the alternate loader. v62.
+                       Alt UoM and Long Text slots stay xlsx-only —
+                       when the main file is an LTMC form, those slots'
+                       data comes from the form's own "Alternative Units
+                       of Measure" and "Additional Descriptions" sheets. -->
+                  <template x-if="!modal.mm?.[slot] || modal.mm[slot].status === 'empty'">
+                    <label class="btn btn-ghost btn-sm cursor-pointer">
+                      <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                      <span x-text="slot === 'main' ? 'Choose .xlsx or .xml' : 'Choose .xlsx'"></span>
+                      <input type="file"
+                             :accept="slot === 'main' ? '.xlsx,.xml' : '.xlsx'"
+                             class="sr-only"
+                             @change="handleMmSlotFile(slot, $event.target.files[0])"/>
+                    </label>
+                  </template>
+                  <!-- Picked: show filename + detected info + swap button -->
+                  <template x-if="modal.mm?.[slot] && modal.mm[slot].status !== 'empty'">
+                    <div class="mm-slot-detail">
+                      <div class="mm-slot-filename mono" x-text="modal.mm[slot].filename"></div>
+                      <div class="mm-slot-info text-[11px] text-muted" x-show="modal.mm[slot].data_rows !== undefined">
+                        <span x-show="modal.mm[slot].data_rows >= 0">
+                          <span x-text="modal.mm[slot].data_rows?.toLocaleString() || 0"></span>
+                          data row<span x-show="modal.mm[slot].data_rows !== 1">s</span>
+                          · <span x-text="modal.mm[slot].column_count?.toLocaleString() || 0"></span>
+                          column<span x-show="modal.mm[slot].column_count !== 1">s</span>
+                        </span>
+                      </div>
+                      <div class="mm-slot-reason text-[11px]"
+                           :class="modal.mm[slot].status === 'bad' ? 'text-danger' : 'text-muted'"
+                           x-text="modal.mm[slot].reason"></div>
+                      <!-- Hint: actionable fix suggestion shown only when
+                           the slot is bad. Backend populates this with
+                           context-specific guidance ("looks like a Long
+                           Text file — move it to the Long Text slot",
+                           "row 1 and row 2 got swapped", etc.). Empty
+                           when the file is fine. -->
+                      <div x-show="modal.mm[slot].status === 'bad' && modal.mm[slot].hint"
+                           class="mm-slot-hint text-[11px] mt-1"
+                           x-text="modal.mm[slot].hint"></div>
+                      <button @click="modal.mm[slot] = null" class="btn btn-ghost btn-xs mt-1">
+                        <i data-lucide="x" class="w-3 h-3"></i>Remove
+                      </button>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- Upload progress (shown during submit) -->
+            <template x-if="modal.uploading">
+              <div class="p-2 rounded" style="background:#f1f5f9">
+                <div class="flex items-center justify-between mb-1">
+                  <div class="text-xs font-medium text-ink" x-text="modal.uploadStatus"></div>
+                  <div class="text-xs text-muted tabular" x-text="Math.round(modal.uploadProgress) + '%'"></div>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-fill" :style="`width:${modal.uploadProgress}%`"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- ── PP flow: BOM (required) + Routing (optional) ── -->
+        <template x-if="modal.module === 'PP'">
+          <div class="space-y-3">
+            <div class="p-3 rounded" style="background:#fef3c7; border:1px solid #fde68a">
+              <div class="flex items-start gap-2">
+                <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5" style="color:#92400e"></i>
+                <div class="flex-1">
+                  <div class="text-xs font-semibold" style="color:#78350f">PP — BOM and Routing</div>
+                  <div class="text-[11px] text-muted">
+                    Drop the BOM file (required) and optionally a Routing file.
+                    Both follow the SAP S/4HANA LTMC template format with the 8-row
+                    header (data starts at row 9). The validator checks mandatory
+                    fields, max-length per the template, ISO unit-of-measure codes,
+                    and composite-key duplicates.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2 slots: BOM (required) + Routing (optional) -->
+            <template x-for="slot in ['bom', 'routing']" :key="slot">
+              <div class="mm-slot" :class="modal.pp?.[slot]?.status || 'empty'">
+                <div class="mm-slot-header">
+                  <div>
+                    <div class="mm-slot-title" x-text="({
+                      bom: 'BOM File',
+                      routing: 'Routing File',
+                    })[slot]"></div>
+                    <div class="mm-slot-subtitle" x-text="({
+                      bom: 'Material BOM · Header + Items + Subitems + Dependencies',
+                      routing: 'Routing · Groups + Operations + Components + PRTs',
+                    })[slot]"></div>
+                  </div>
+                  <span class="mm-slot-status" :class="modal.pp?.[slot]?.status || 'empty'">
+                    <template x-if="!modal.pp?.[slot] || modal.pp[slot].status === 'empty'">
+                      <span x-text="slot === 'bom' ? 'Required' : 'Optional'"></span>
+                    </template>
+                    <template x-if="modal.pp?.[slot]?.status === 'checking'">
+                      <span class="flex items-center gap-1">
+                        <span class="inline-spinner inline-spinner-sm"></span>Checking…
+                      </span>
+                    </template>
+                    <template x-if="modal.pp?.[slot]?.status === 'ok'">
+                      <span class="flex items-center gap-1">
+                        <i data-lucide="check-circle-2" class="w-3 h-3"></i>OK
+                      </span>
+                    </template>
+                    <template x-if="modal.pp?.[slot]?.status === 'bad'">
+                      <span class="flex items-center gap-1">
+                        <i data-lucide="x-circle" class="w-3 h-3"></i>Wrong format
+                      </span>
+                    </template>
+                  </span>
+                </div>
+                <div class="mm-slot-body">
+                  <template x-if="!modal.pp?.[slot] || modal.pp[slot].status === 'empty'">
+                    <label class="btn btn-ghost btn-sm cursor-pointer">
+                      <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                      Choose .xlsx
+                      <input type="file" accept=".xlsx" class="sr-only"
+                             @change="handlePpSlotFile(slot, $event.target.files[0])"/>
+                    </label>
+                  </template>
+                  <template x-if="modal.pp?.[slot] && modal.pp[slot].status !== 'empty'">
+                    <div class="mm-slot-detail">
+                      <div class="mm-slot-filename mono" x-text="modal.pp[slot].filename"></div>
+                      <div class="mm-slot-reason text-[11px]"
+                           :class="modal.pp[slot].status === 'bad' ? 'text-danger' : 'text-muted'"
+                           x-text="modal.pp[slot].reason"></div>
+                      <button @click="modal.pp[slot] = null" class="btn btn-ghost btn-xs mt-1">
+                        <i data-lucide="x" class="w-3 h-3"></i>Remove
+                      </button>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- Upload progress -->
+            <template x-if="modal.uploading">
+              <div class="p-2 rounded" style="background:#f1f5f9">
+                <div class="flex items-center justify-between mb-1">
+                  <div class="text-xs font-medium text-ink" x-text="modal.uploadStatus"></div>
+                  <div class="text-xs text-muted tabular" x-text="Math.round(modal.uploadProgress) + '%'"></div>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-fill" :style="`width:${modal.uploadProgress}%`"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <div x-show="modal.sizeWarning" class="p-3 bg-amber-50 border border-amber-200 rounded text-xs">
+          <div class="flex items-start gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-warn mt-0.5 shrink-0"></i>
+            <div>
+              <div class="font-semibold text-warn">Large file detected</div>
+              <div class="text-muted mt-0.5">Files over 100 MB may take several minutes to process.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button @click="closeModal()" class="btn btn-ghost">Cancel</button>
+        <!-- MM submit -->
+        <button x-show="modal.module === 'MM'" @click="submitMmUpload()"
+                :disabled="!mmUploadReady() || modal.uploading"
+                :class="modal.uploading ? 'btn-busy' : ''"
+                class="btn btn-primary">
+          <i data-lucide="upload" class="w-3.5 h-3.5" x-show="!modal.uploading"></i>
+          <span x-show="!modal.uploading">Upload &amp; Validate</span>
+          <span x-show="modal.uploading" class="flex items-center gap-1">
+            <span class="inline-spinner inline-spinner-sm"></span>
+            Uploading…
+          </span>
+        </button>
+        <!-- PP submit -->
+        <button x-show="modal.module === 'PP'" @click="submitPpUpload()"
+                :disabled="!ppUploadReady() || modal.uploading"
+                :class="modal.uploading ? 'btn-busy' : ''"
+                class="btn btn-primary">
+          <i data-lucide="upload" class="w-3.5 h-3.5" x-show="!modal.uploading"></i>
+          <span x-show="!modal.uploading">Upload &amp; Validate</span>
+          <span x-show="modal.uploading" class="flex items-center gap-1">
+            <span class="inline-spinner inline-spinner-sm"></span>
+            Uploading…
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: CONFIRMATION / REASON PROMPT ═══ -->
+  <div x-show="modal.type === 'confirm'" class="modal-backdrop"
+       @click.self="onCancel()" style="display:none">
+    <div class="modal animate-slide-up" style="max-width:460px">
+      <div class="modal-header">
+        <div class="flex items-start gap-3">
+          <div :class="{
+                 'bg-red-50 text-danger': modal.tone === 'danger',
+                 'bg-amber-50 text-warn': modal.tone === 'warn',
+                 'bg-blue-50 text-brand': modal.tone !== 'danger' && modal.tone !== 'warn'
+               }" class="w-9 h-9 rounded-full flex items-center justify-center shrink-0">
+            <i :data-lucide="modal.icon || 'alert-triangle'" class="w-4 h-4"></i>
+          </div>
+          <div class="flex-1">
+            <div class="card-title text-base" x-text="modal.title"></div>
+            <div class="text-xs text-muted mt-1" x-text="modal.message" x-show="modal.message"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-body" x-show="modal.reasonRequired">
+        <label class="block text-xs font-medium text-ink-2 mb-1.5">
+          Business reason <span class="text-danger">*</span>
+          <span class="text-muted font-normal">(required — recorded in audit trail)</span>
+        </label>
+        <textarea x-model="modal.reason"
+                  @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); onConfirm(); }"
+                  placeholder="e.g. Standardize incoterms per SAP OV41 (Enter to submit · Shift+Enter for newline)"
+                  class="w-full border rounded px-3 py-2 text-sm"
+                  rows="3"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button"
+                data-mdv-action="confirm-cancel"
+                x-on:click.stop="onCancel()"
+                class="btn btn-ghost"
+                x-text="modal.cancelLabel || 'Cancel'"></button>
+        <button type="button"
+                data-mdv-action="confirm-ok"
+                x-on:click.stop="onConfirm()"
+                :class="modal.tone === 'danger' ? 'btn-danger' : 'btn-primary'"
+                class="btn"
+                x-text="modal.confirmLabel || 'Confirm'"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: DECISION ACTION (Bulk Change) ═══
+       Simpler sibling of Group & Replace — one "Enter replacement" input
+       + optional reason + Apply. Used for bulk_replace/bulk_fill/bulk_clear
+       action kinds where there's a single value going into every flagged
+       cell. Same suggestion-chip pattern as Group & Replace for visual
+       consistency: if the decision has a KDS catalog, the first suggestion
+       shows as a purple chip under the input. -->
+  <div x-show="modal.type === 'action'" class="modal-backdrop" @click.self="closeModal()" style="display:none">
+    <div class="modal animate-slide-up">
+      <div class="modal-header">
+        <div class="card-title text-base" x-text="modal.title"></div>
+        <div class="text-xs text-muted mt-0.5" x-text="modal.subtitle"></div>
+      </div>
+      <div class="modal-body space-y-3">
+        <template x-if="modal.requiresValue">
+          <div>
+            <label class="field-label">New value</label>
+            <input x-model="modal.value" type="text" class="ff ff-mono"
+                   placeholder="Enter replacement…" autofocus/>
+            <!-- Single KDS suggestion chip under input (same pattern as Group
+                 & Replace). Loads lazily when the modal opens if the decision
+                 is catalog-backed. Clicking fills the input. -->
+            <template x-if="modal.topSuggestion">
+              <button type="button"
+                      @click="modal.value = modal.topSuggestion.code"
+                      class="suggestion-chip mt-2"
+                      :title="modal.topSuggestion.description + ' (match ' + Math.round((modal.topSuggestion.ratio ?? 1) * 100) + '%)'">
+                <i data-lucide="sparkles" class="w-3 h-3"></i>
+                <span class="mono font-semibold" x-text="modal.topSuggestion.code"></span>
+                <span class="suggestion-chip-sep" x-show="modal.topSuggestion.description">—</span>
+                <span class="suggestion-chip-desc" x-show="modal.topSuggestion.description"
+                      x-text="modal.topSuggestion.description"></span>
+              </button>
+            </template>
+          </div>
+        </template>
+        <template x-if="modal.requiresReason">
+          <div>
+            <label class="field-label">Business reason <span class="text-dim font-normal">(audit log)</span></label>
+            <textarea x-model="modal.reason" class="ff" rows="2"
+                      @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); onActionConfirm(); }"
+                      placeholder="Why this decision? (Enter to submit · Shift+Enter for newline)"></textarea>
+          </div>
+        </template>
+      </div>
+      <div class="modal-footer">
+        <button type="button" data-mdv-action="action-cancel" @click="closeModal()" class="btn btn-ghost">Cancel</button>
+        <button type="button" data-mdv-action="action-apply" @click="onActionConfirm()" class="btn btn-primary" x-text="modal.confirmLabel ?? 'Apply'"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: PREVIEW ROWS ═══ -->
+  <div x-show="modal.type === 'preview'" class="modal-backdrop" @click.self="closeModal()" style="display:none">
+    <div class="modal modal-wide animate-slide-up" style="max-width:1180px">
+      <div class="modal-header">
+        <div class="flex items-center justify-between gap-3 w-full">
+          <div>
+            <div class="card-title text-base">
+              <span x-show="!modal.isDuplicate">Affected rows</span>
+              <span x-show="modal.isDuplicate">Duplicate clusters</span>
+              <span class="text-dim font-normal"> · <span x-text="modal.previewRows?.length"></span> rows</span>
+            </div>
+            <div class="text-xs text-muted mt-0.5">
+              <span class="font-semibold text-ink-2" x-text="modal.ruleName ?? modal.subtitle"></span>
+              <span x-show="modal.columnLabel"> · </span>
+              <span x-show="modal.columnLabel" class="mono" x-text="modal.columnLabel"></span>
+            </div>
+          </div>
+          <div x-show="modal.isDuplicate" class="text-[11px] text-muted">
+            <span class="pill pill-danger mr-1">DUP</span> flagged
+            <span class="pill pill-success mx-1 ml-3">KEEP</span> first
+          </div>
+        </div>
+      </div>
+
+      <!-- Truncation banner -->
+      <div x-show="modal.truncated" class="px-4 py-2 bg-amber-50 border-b border-amber-200 text-xs text-ink-2">
+        <i data-lucide="info" class="w-3.5 h-3.5 inline mr-1 text-warn"></i>
+        Showing first <span class="font-semibold tabular" x-text="modal.shownCount"></span> of
+        <span class="font-semibold tabular" x-text="modal.totalCount?.toLocaleString()"></span> rows.
+        <span x-show="modal.isDuplicate"> Use <b>Delete all flagged duplicates</b> to remove all
+          <span class="tabular" x-text="modal.flaggedTotal?.toLocaleString()"></span> DUP rows in one action.</span>
+      </div>
+
+      <!-- Bulk actions bar - only for duplicates -->
+      <div x-show="modal.isDuplicate" class="px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2 flex-wrap">
+        <button @click="selectAllDupes()" class="btn btn-ghost btn-xs">
+          <i data-lucide="check-square" class="w-3.5 h-3.5"></i>
+          Select all DUP (visible)
+        </button>
+        <button @click="selectAllNonBest()" class="btn btn-ghost btn-xs"
+                title="Keep the BEST (most complete) row in each customer cluster, select the rest for deletion">
+          <i data-lucide="star" class="w-3.5 h-3.5"></i>
+          Keep BEST, select rest
+        </button>
+        <button @click="selectNone()" class="btn btn-ghost btn-xs">Clear</button>
+        <div class="text-xs text-muted">
+          <span class="tabular font-semibold text-ink" x-text="modal.selectedRows?.length ?? 0"></span> selected
+        </div>
+        <div class="flex-1"></div>
+        <button @click="deleteAllFlagged()"
+                x-show="modal.truncated"
+                class="btn btn-danger btn-sm">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          Delete all flagged (<span class="tabular" x-text="modal.flaggedTotal?.toLocaleString()"></span>)
+        </button>
+        <button @click="bulkDeleteSelected()"
+                :disabled="(modal.selectedRows?.length ?? 0) === 0"
+                class="btn btn-danger btn-sm">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          Delete selected
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding:0; max-height:60vh; overflow-y:auto">
+        <!-- Non-duplicate view — richer per-row context.
+             We split SD vs MM here because the shapes are genuinely
+             different: SD rows are flat with customer_num/customer_name,
+             MM rows carry a cells dict keyed by SAP code (MATNR, MTART,
+             WERKS, MAKTX, + the field under scrutiny). Backend sends
+             modal.keyColumns as [{col_idx, label}] for MM and as an
+             array of strings for SD — the MM path reads the label from
+             each entry (handling both shapes defensively). -->
+        <template x-if="!modal.isDuplicate && dashboard.module !== 'MM'">
+          <table class="table table-condensed">
+            <thead style="position:sticky; top:0; z-index:1">
+              <tr>
+                <th style="width:55px">Row</th>
+                <th style="width:110px">Customer</th>
+                <th>Name</th>
+                <th>
+                  <span x-text="modal.columnLabel"></span>
+                  <span class="text-dim font-normal"> (current)</span>
+                </th>
+                <th class="right" style="width:90px">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in (modal.previewRows ?? [])" :key="r.row_idx">
+                <tr class="error-row">
+                  <td class="tabular text-muted text-xs" x-text="r.xml_row"></td>
+                  <td class="mono text-xs" x-text="r.customer_num || '—'"></td>
+                  <td class="text-xs" x-text="r.customer_name || '—'"></td>
+                  <td class="mono text-xs text-danger font-semibold" x-text="r.current_value || '(blank)'"></td>
+                  <td class="right">
+                    <button @click="openRecordFromModal(r.row_idx)"
+                            :class="busyFor('record:'+(modal.currentDecision?.sheet)+':'+r.row_idx) ? 'btn-busy' : ''"
+                            class="btn btn-ghost btn-xs">
+                      <span x-show="busyFor('record:'+(modal.currentDecision?.sheet)+':'+r.row_idx)" class="inline-spinner inline-spinner-sm mr-1"></span>
+                      Open
+                    </button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </template>
+
+        <!-- MM non-duplicate view — dynamic columns from backend.
+             Backend returns key_columns = [MATNR, MTART, WERKS, MAKTX,
+             <field_under_scrutiny>] and each row carries a `cells` dict
+             keyed by those column labels. MAKTX gets more width because
+             descriptions are long. The column under scrutiny is coloured
+             red so the bad value stands out at a glance. -->
+        <template x-if="!modal.isDuplicate && dashboard.module === 'MM'">
+          <table class="table table-condensed">
+            <thead style="position:sticky; top:0; z-index:1">
+              <tr>
+                <th style="width:55px">Row</th>
+                <template x-for="col in (modal.keyColumns ?? [])" :key="mmColLabel(col)">
+                  <th :style="mmColLabel(col) === 'MAKTX' ? 'min-width:240px' : ''"
+                      :class="mmColLabel(col) === (modal.currentDecision?.sap_field) ? 'text-danger' : ''">
+                    <span x-text="mmColLabel(col)"></span>
+                    <span x-show="mmColLabel(col) === (modal.currentDecision?.sap_field)"
+                          class="text-dim font-normal"> (current)</span>
+                  </th>
+                </template>
+                <th class="right" style="width:90px">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in (modal.previewRows ?? [])" :key="r.row_idx">
+                <tr class="error-row">
+                  <td class="tabular text-muted text-xs" x-text="r.xml_row"></td>
+                  <template x-for="col in (modal.keyColumns ?? [])" :key="mmColLabel(col)">
+                    <td class="text-xs"
+                        :class="mmColLabel(col) === (modal.currentDecision?.sap_field)
+                                ? 'mono text-danger font-semibold'
+                                : (mmColLabel(col) === 'MAKTX' ? '' : 'mono')"
+                        x-text="(r.cells?.[mmColLabel(col)] ?? '') || (mmColLabel(col) === (modal.currentDecision?.sap_field) ? '(blank)' : '—')">
+                    </td>
+                  </template>
+                  <td class="right">
+                    <button @click="openRecordFromModal(r.row_idx)"
+                            :class="busyFor('record:'+(modal.currentDecision?.sheet)+':'+r.row_idx) ? 'btn-busy' : ''"
+                            class="btn btn-ghost btn-xs">
+                      <span x-show="busyFor('record:'+(modal.currentDecision?.sheet)+':'+r.row_idx)" class="inline-spinner inline-spinner-sm mr-1"></span>
+                      Open
+                    </button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </template>
+
+        <!-- Duplicate view — wide comparison table -->
+        <template x-if="modal.isDuplicate">
+          <table class="table table-condensed">
+            <thead style="position:sticky; top:0; z-index:1">
+              <tr>
+                <th style="width:30px">
+                  <input type="checkbox" @change="$event.target.checked ? selectAllVisible() : selectNone()"/>
+                </th>
+                <th style="width:55px">Row</th>
+                <th style="width:50px">Status</th>
+                <template x-for="col in (modal.keyColumns ?? [])" :key="col">
+                  <th x-text="col"></th>
+                </template>
+                <th x-show="modal.hasSalesAreas" style="min-width:130px">Sales Areas (SO/DC/DIV)</th>
+                <th class="right" style="width:80px">Filled</th>
+                <th class="right" style="width:70px">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in (modal.previewRows ?? [])" :key="r.row_idx">
+                <tr :class="r.is_best === true ? 'row-best' : (r.is_flagged_duplicate ? 'error-row' : '')">
+                  <td>
+                    <input type="checkbox"
+                           :value="r.row_idx"
+                           :checked="(modal.selectedRows ?? []).includes(r.row_idx)"
+                           @change="toggleRowSelection(r.row_idx)"/>
+                  </td>
+                  <td class="tabular text-muted text-xs" x-text="r.xml_row"></td>
+                  <td class="whitespace-nowrap">
+                    <span x-show="r.is_flagged_duplicate" class="pill pill-danger">DUP</span>
+                    <span x-show="!r.is_flagged_duplicate" class="pill pill-success">KEEP</span>
+                    <span x-show="r.is_best === true" class="pill pill-info ml-1" title="Most complete record in this duplicate group">
+                      <i data-lucide="star" class="w-3 h-3 inline" style="vertical-align:-2px"></i>
+                      BEST
+                    </span>
+                  </td>
+                  <template x-for="col in (modal.keyColumns ?? [])" :key="col">
+                    <td class="mono text-xs" x-text="(r.key_values?.[col] ?? '') || '—'"></td>
+                  </template>
+                  <td x-show="modal.hasSalesAreas" class="text-xs">
+                    <template x-if="r.sales_areas && r.sales_areas.length > 0">
+                      <div class="space-y-0.5">
+                        <template x-for="(sa, i) in r.sales_areas.slice(0, 3)" :key="i">
+                          <div class="mono text-[10.5px]" x-text="(sa.sales_org || '·') + '/' + (sa.distribution_channel || '·') + '/' + (sa.division || '·')"></div>
+                        </template>
+                        <div x-show="r.sales_areas.length > 3" class="text-[10px] text-dim" x-text="'+' + (r.sales_areas.length - 3) + ' more'"></div>
+                      </div>
+                    </template>
+                    <span x-show="!r.sales_areas || r.sales_areas.length === 0" class="text-dim">—</span>
+                  </td>
+                  <td class="right">
+                    <span class="tabular text-xs font-semibold" x-text="r.completeness"></span>
+                  </td>
+                  <td class="right">
+                    <button @click="openRecordFromModal(r.row_idx)"
+                            :class="busyFor('record:'+(modal.currentDecision?.sheet)+':'+r.row_idx) ? 'btn-busy' : ''"
+                            class="btn btn-ghost btn-xs">
+                      <span x-show="busyFor('record:'+(modal.currentDecision?.sheet)+':'+r.row_idx)" class="inline-spinner inline-spinner-sm mr-1"></span>
+                      Open
+                    </button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </template>
+      </div>
+
+      <div class="modal-footer">
+        <div class="flex-1 text-[11px] text-muted">
+          <span x-show="modal.isDuplicate">Select duplicate rows → <b>Delete selected</b>. Audit reason required.</span>
+          <span x-show="!modal.isDuplicate && modal.previewRows?.length > 0">
+            <b>Open</b> any row to fix inline with full context and keyboard navigation.
+          </span>
+        </div>
+        <button @click="closeModal()" class="btn btn-ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: GROUP & REPLACE ═══
+       Shows every distinct bad value flagged by a single decision, with count
+       and a "Replace with" input per value. User ticks rows they want to fix,
+       types the replacement (or enables Auto-populate from KDS), then Apply.
+       Confirmation inline when > 10 cells would change. Each replacement
+       becomes its own audit entry → per-cell undo via Recent Activity. -->
+  <div x-show="modal.type === 'group_replace'" class="modal-backdrop" @click.self="closeModal()" style="display:none">
+    <div class="modal modal-wide animate-slide-up" style="max-width:1100px">
+      <div class="modal-header">
+        <div class="flex items-center justify-between gap-3 w-full">
+          <div>
+            <div class="card-title text-base">
+              Group &amp; replace
+              <span class="text-dim font-normal">·
+                <span x-text="modal.groups?.total_errors?.toLocaleString()"></span> errors,
+                <span x-text="modal.groups?.distinct_values?.toLocaleString()"></span> distinct values
+              </span>
+            </div>
+            <div class="text-xs text-muted mt-0.5">
+              <span class="font-semibold text-ink-2" x-text="modal.groups?.rule_name"></span>
+              <span x-show="modal.groups?.column_label"> · </span>
+              <span x-show="modal.groups?.column_label" class="mono" x-text="modal.groups?.column_label"></span>
+              <span x-show="modal.groups?.has_catalog" class="pill pill-info ml-2">KDS-backed</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-body space-y-3">
+        <!-- ═══ PHASE: EDIT ═══ User builds replacements. Simple shape:
+             one row per distinct bad value, each with a text input that's
+             been pre-filled with the KDS suggestion (if any). Top of modal
+             has one "Apply KDS to all" link to fill ALL suggestions at once
+             — replaces the old auto-populate toggle + per-row "Apply" +
+             "Also:" line, which were three redundant controls. -->
+        <template x-if="(modal.phase ?? 'edit') === 'edit'">
+          <div class="space-y-3">
+            <!-- Top row: one action ("Apply KDS to all") + search when list is long.
+                 Shown only when there's at least one catalog-backed suggestion
+                 available (otherwise there's nothing to apply). -->
+            <div class="flex items-center gap-3 flex-wrap"
+                 x-show="modal.groups?.has_catalog && groupHasAnyKdsSuggestion()">
+              <button type="button" @click="applyKdsToAll()"
+                      class="btn btn-purple btn-sm">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                Apply KDS to all
+              </button>
+              <span class="text-xs text-muted">
+                — fills every row that has a KDS suggestion. You can still edit
+                any value before applying.
+              </span>
+            </div>
+
+            <!-- Search for long lists -->
+            <div x-show="(modal.groups?.groups?.length ?? 0) > 15">
+              <input type="text" x-model="modal.groupSearch"
+                     placeholder="Filter bad values…"
+                     class="ff ff-mono" style="width: 260px"/>
+            </div>
+
+            <!-- Value grid — one row per distinct bad value.
+                 Each row: checkbox, bad value, count, single replacement input.
+                 If the row has a KDS suggestion, it's shown as a purple chip
+                 under the input; clicking the chip fills the input.
+                 No "Also:" line, no dropdown, no nested Apply buttons. -->
+            <div class="border rounded overflow-hidden" style="border-color:#e5e7eb; max-height: 440px; overflow-y:auto">
+              <table class="w-full text-xs">
+                <thead class="sticky top-0 z-10" style="background:#f8fafc">
+                  <tr>
+                    <th class="px-2 py-2 w-8 text-left">
+                      <input type="checkbox" :checked="modal.allTicked"
+                             @change="toggleAllGroups($event.target.checked)"/>
+                    </th>
+                    <th class="px-2 py-2 text-left">Bad value</th>
+                    <th class="px-2 py-2 text-right w-16">Count</th>
+                    <th class="px-2 py-2 text-left" style="min-width:360px">Replace with</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="g in filteredGroupRows()" :key="g.value">
+                    <tr :class="g._ticked ? '' : 'text-muted'" class="border-t align-top" style="border-color:#f1f5f9">
+                      <td class="px-2 py-2">
+                        <input type="checkbox" x-model="g._ticked"/>
+                      </td>
+                      <td class="px-2 py-2 mono" style="word-break:break-word">
+                        <span x-text="g.value === '' ? '(blank)' : g.value"></span>
+                      </td>
+                      <td class="px-2 py-2 text-right tabular font-semibold" x-text="g.count.toLocaleString()"></td>
+                      <td class="px-2 py-2">
+                        <!-- Replacement input. When a KDS catalog exists for
+                             this rule (LGPRO, LGORT, EXTWG, etc.) we show
+                             the dropdown AND a free-text box together —
+                             both sync to the same `g._replace`. SMEs can:
+                               (a) pick a known-valid value from the dropdown
+                                   (fast for the common case), OR
+                               (b) type their own value in the text box for
+                                   cases the KDS doesn't cover yet (e.g.
+                                   a new plant code, an exception)
+                             Whichever they touched LAST wins because both
+                             inputs share the same x-model.
+
+                             For free-text-only rules (no catalog), the
+                             dropdown branch is hidden and only the text
+                             box renders. -->
+                        <div class="flex flex-col gap-1">
+                          <template x-if="modal.groups?.has_catalog">
+                            <select x-model="g._replace"
+                                    @change="g._ticked = g._replace !== ''"
+                                    class="ff" style="padding:4px 8px; width:100%; font-size:11.5px">
+                              <option value="">— pick from KDS —</option>
+                              <template x-for="opt in (modal.groups?.catalog_sample ?? [])" :key="opt.code">
+                                <option :value="opt.code"
+                                        x-text="opt.code + (opt.description && opt.description !== opt.code ? ' — ' + opt.description : '')">
+                                </option>
+                              </template>
+                            </select>
+                          </template>
+                          <input type="text" x-model="g._replace"
+                                 @input="g._ticked = g._replace !== ''"
+                                 @keyup.enter.prevent="g._ticked = g._replace !== ''"
+                                 :placeholder="modal.groups?.has_catalog ? 'or type your own…' : 'Type replacement…'"
+                                 class="ff ff-mono" style="padding:4px 8px; width:100%"/>
+                        </div>
+                        <!-- Single suggestion chip under input — click to fill.
+                             Purple (suggestion colour in this app's palette).
+                             Description truncated if long so the chip stays
+                             compact; full value shown in tooltip. -->
+                        <template x-if="g.suggestions && g.suggestions.length > 0">
+                          <button type="button"
+                                  @click="g._replace = g.suggestions[0].code; g._ticked = true"
+                                  class="suggestion-chip mt-1"
+                                  :title="g.suggestions[0].description + ' (match ' + (g.suggestions[0].ratio * 100).toFixed(0) + '%)'">
+                            <i data-lucide="sparkles" class="w-3 h-3"></i>
+                            <span class="mono font-semibold" x-text="g.suggestions[0].code"></span>
+                            <span class="suggestion-chip-sep" x-show="g.suggestions[0].description">—</span>
+                            <span class="suggestion-chip-desc" x-show="g.suggestions[0].description"
+                                  x-text="g.suggestions[0].description"></span>
+                          </button>
+                        </template>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </template>
+
+        <!-- ═══ PHASE: PREVIEW ═══ After user clicks "Preview changes", show
+             a summary of what will change so they can confirm before writing.
+             Only the ticked+filled rows are shown here. -->
+        <template x-if="modal.phase === 'preview'">
+          <div class="space-y-3">
+            <div class="p-3 rounded" style="background:#f0fdf4; border:1px solid #86efac">
+              <div class="flex items-center gap-2 mb-2">
+                <i data-lucide="eye" class="w-4 h-4" style="color:#16a34a"></i>
+                <span class="font-semibold text-sm text-ink">Review changes before applying</span>
+              </div>
+              <div class="text-xs text-ink-2">
+                <strong x-text="groupRulesToApply()"></strong>
+                replacement<span x-show="groupRulesToApply() !== 1">s</span>
+                · <strong x-text="groupCellsToChange().toLocaleString()"></strong>
+                cell<span x-show="groupCellsToChange() !== 1">s</span> will change.
+                <span x-show="groupCellsToChange() > 10">
+                  A reason is required before Apply.
+                </span>
+              </div>
+            </div>
+
+            <!-- Summary table of pending changes -->
+            <div class="border rounded overflow-hidden" style="border-color:#e5e7eb; max-height: 340px; overflow-y:auto">
+              <table class="w-full text-xs">
+                <thead class="sticky top-0 z-10" style="background:#f8fafc">
+                  <tr>
+                    <th class="px-3 py-2 text-left">From</th>
+                    <th class="px-3 py-2 text-left">To</th>
+                    <th class="px-3 py-2 text-right w-20">Rows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="g in groupRowsReady()" :key="g.value">
+                    <tr class="border-t" style="border-color:#f1f5f9">
+                      <td class="px-3 py-2 mono" x-text="g.value === '' ? '(blank)' : g.value"></td>
+                      <td class="px-3 py-2 mono font-semibold" style="color:#166534" x-text="g._replace"></td>
+                      <td class="px-3 py-2 text-right tabular font-semibold" x-text="g.count.toLocaleString()"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Reason — required when > 10 cells -->
+            <div>
+              <label class="field-label">
+                Reason
+                <span x-show="groupCellsToChange() > 10" class="text-danger">
+                  (required)
+                </span>
+              </label>
+              <input x-model="modal.groupReason" type="text"
+                     placeholder="e.g. Standardize case per SD SME"
+                     class="ff"/>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Footer changes per phase -->
+      <div class="modal-footer flex items-center justify-between gap-3">
+        <div class="text-xs text-muted">
+          <template x-if="(modal.phase ?? 'edit') === 'edit'">
+            <span>
+              <span x-show="groupRulesToApply() === 0">Tick rows and enter replacement values.</span>
+              <span x-show="groupRulesToApply() > 0">
+                <strong x-text="groupRulesToApply()"></strong>
+                rule<span x-show="groupRulesToApply() !== 1">s</span> ready ·
+                <strong x-text="groupCellsToChange().toLocaleString()"></strong>
+                cell<span x-show="groupCellsToChange() !== 1">s</span> will change.
+              </span>
+            </span>
+          </template>
+          <template x-if="modal.phase === 'preview'">
+            <span>Review the changes above, then Apply to write them.</span>
+          </template>
+        </div>
+        <div class="flex items-center gap-2">
+          <!-- Edit phase: Cancel + Preview changes -->
+          <template x-if="(modal.phase ?? 'edit') === 'edit'">
+            <span class="flex items-center gap-2">
+              <button @click="closeModal()" class="btn btn-ghost">Cancel</button>
+              <button @click="modal.phase = 'preview'"
+                      :disabled="groupRulesToApply() === 0"
+                      class="btn btn-primary">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                Preview changes
+              </button>
+            </span>
+          </template>
+          <!-- Preview phase: Back + Apply -->
+          <template x-if="modal.phase === 'preview'">
+            <span class="flex items-center gap-2">
+              <button @click="modal.phase = 'edit'" class="btn btn-ghost">
+                <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i>
+                Back
+              </button>
+              <button @click="applyGroupReplace()"
+                      :disabled="busyFor('grp-apply') || (groupCellsToChange() > 10 && !(modal.groupReason ?? '').trim())"
+                      :class="busyFor('grp-apply') ? 'btn-busy' : ''"
+                      class="btn btn-primary">
+                <span x-show="busyFor('grp-apply')" class="inline-spinner inline-spinner-sm"></span>
+                <i x-show="!busyFor('grp-apply')" data-lucide="check" class="w-3.5 h-3.5"></i>
+                <span x-text="busyFor('grp-apply') ? 'Applying…' : ('Apply ' + groupCellsToChange().toLocaleString() + ' change' + (groupCellsToChange() === 1 ? '' : 's'))"></span>
+              </button>
+            </span>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: CREATE USER ═══ -->
+  <div x-show="modal.type === 'create_user'" class="modal-backdrop" @click.self="closeModal()" style="display:none">
+    <div class="modal animate-slide-up">
+      <div class="modal-header"><div class="card-title text-base">Create user</div></div>
+      <div class="modal-body space-y-3">
+        <div>
+          <label class="field-label">Username</label>
+          <input x-model="modal.newUser.username" class="ff ff-mono" placeholder="e.g. sduser2"/>
+        </div>
+        <div>
+          <label class="field-label">Display name</label>
+          <input x-model="modal.newUser.display_name" class="ff" placeholder="e.g. Ravi Sharma"/>
+        </div>
+        <div>
+          <label class="field-label">Password</label>
+          <input x-model="modal.newUser.password" type="text" class="ff ff-mono" placeholder="Initial password"/>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="field-label">Role</label>
+            <select x-model="modal.newUser.role" class="ff">
+              <option value="module">Module user</option>
+              <option value="it">IT (read all)</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div x-show="modal.newUser.role === 'module'">
+            <label class="field-label">Module</label>
+            <select x-model="modal.newUser.module" class="ff">
+              <option value="SD">SD</option>
+              <option value="MM">MM</option>
+              <option value="PP">PP</option>
+              <option value="QM">QM</option>
+              <option value="FICO">FICO</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button @click="closeModal()" class="btn btn-ghost">Cancel</button>
+        <button @click="submitCreateUser()" class="btn btn-primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: CHANGE PASSWORD ═══ -->
+  <div x-show="modal.type === 'change_pw'" class="modal-backdrop" @click.self="closeModal()" style="display:none">
+    <div class="modal animate-slide-up">
+      <div class="modal-header"><div class="card-title text-base">Change password · <span x-text="modal.pwUsername" class="mono"></span></div></div>
+      <div class="modal-body">
+        <label class="field-label">New password</label>
+        <input x-model="modal.newPassword" type="text" class="ff ff-mono" placeholder="New password" autofocus/>
+      </div>
+      <div class="modal-footer">
+        <button @click="closeModal()" class="btn btn-ghost">Cancel</button>
+        <button @click="submitChangePw()" class="btn btn-primary">Update</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHANGE ROLE MODAL — admin only, forbids demoting the primary admin -->
+  <div x-show="modal.type === 'change_role'" class="modal-backdrop" @click.self="closeModal()" style="display:none">
+    <div class="modal animate-slide-up">
+      <div class="modal-header"><div class="card-title text-base">Change role · <span x-text="modal.roleUsername" class="mono"></span></div></div>
+      <div class="modal-body">
+        <label class="field-label">New role</label>
+        <select x-model="modal.newRole" class="ff" autofocus>
+          <option value="admin">admin — full access</option>
+          <option value="it">it — IT team (read-only audit + repo)</option>
+          <option value="module">module — SME for one module (SD/MM/PP/QM/FICO)</option>
+        </select>
+        <template x-if="modal.newRole === 'module'">
+          <div style="margin-top:12px">
+            <label class="field-label">Module</label>
+            <select x-model="modal.newModule" class="ff">
+              <option value="">— Select module —</option>
+              <option value="SD">SD — Sales &amp; Distribution</option>
+              <option value="MM">MM — Materials Management</option>
+              <option value="PP">PP — Production Planning</option>
+              <option value="QM">QM — Quality Management</option>
+              <option value="FICO">FICO — Finance &amp; Controlling</option>
+            </select>
+          </div>
+        </template>
+        <div class="text-xs text-muted" style="margin-top:10px">
+          Changing role takes effect on the user's next page load.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button @click="closeModal()" class="btn btn-ghost">Cancel</button>
+        <button @click="submitChangeRole()" class="btn btn-primary">Update role</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST stack -->
+  <div class="toast">
+    <template x-for="t in toasts" :key="t.id">
+      <div :class="'toast-item toast-' + t.type"
+           x-transition:enter="transition ease-out duration-300"
+           x-transition:enter-start="opacity-0 translate-x-4"
+           x-transition:enter-end="opacity-100 translate-x-0"
+           x-transition:leave="transition ease-in duration-200"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        <i :data-lucide="t.icon ?? 'info'" class="w-4 h-4 mt-0.5 shrink-0"></i>
+        <span x-text="t.msg"></span>
+      </div>
+    </template>
+  </div>
+
+</div>
+
+<script src="/static/js/app.js?v=45"></script>
+</body>
+</html>

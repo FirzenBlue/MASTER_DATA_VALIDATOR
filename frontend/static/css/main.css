@@ -1,0 +1,2000 @@
+/* ═══ Master Data Validator — Enterprise UI ═══ */
+/* Design: dense, scannable, no wasted space. Sidebar dark, content warm gray. */
+
+[x-cloak] { display: none !important; }
+* { -webkit-font-smoothing: antialiased; }
+html, body { scroll-behavior: smooth; }
+
+body {
+  background: #f4f5f7;
+  color: #1a1f2e;
+  font-size: 13px;
+}
+
+input[type="file"] { display: none; }
+
+/* ── Scrollbars ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 5px;
+  border: 2px solid #f4f5f7;
+}
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Sidebar scrollbar (dark) */
+.sidebar ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-color: #0b1220;
+}
+.sidebar ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+.tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+.stat-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  font-feature-settings: "ss01","tnum";
+}
+
+/* ── APP SHELL ─────────────────────────────────────────────
+   Three-pane layout with frozen sidebar. The app fills the full
+   viewport; only .content-body scrolls. Prevents the sidebar from
+   scrolling away when users scroll long lists.
+   ──────────────────────────────────────────────────────────── */
+.app-shell {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;       /* window never scrolls; panes do */
+}
+
+/* ── SIDEBAR ──────────────────────────────────────────────── */
+.sidebar {
+  background: #0b1220;
+  color: #cbd5e1;
+  border-right: 1px solid #1e293b;
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;       /* sidebar scrolls independently if nav is long */
+}
+
+.sidebar-logo {
+  padding: 14px 16px;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-section {
+  padding: 14px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: #64748b;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  margin: 1px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all .1s ease;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.sidebar-item:hover {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+
+.sidebar-item.active {
+  background: #1e40af;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.sidebar-item.disabled {
+  color: #475569;
+  cursor: not-allowed;
+}
+
+.sidebar-item.disabled:hover { background: transparent; }
+
+.sidebar-item .badge {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.08);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-item.active .badge {
+  background: rgba(255,255,255,.2);
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: #1e293b;
+  margin: 8px 12px;
+}
+
+.sidebar-footer {
+  padding: 10px 12px;
+  border-top: 1px solid #1e293b;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: #1e293b;
+}
+
+.user-avatar {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  color: #fff;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+/* ── MAIN CONTENT ──────────────────────────────────────────── */
+/* Content area fills viewport height. The content-header stays put
+   (position:sticky within flex column) while content-body scrolls. */
+.content {
+  background: #f4f5f7;
+  height: 100vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;           /* so long content doesn't overflow horizontally */
+  overflow: hidden;       /* inner content-body owns the scroll */
+}
+
+/* Each view-section inside .content must itself be a flex column that
+   fills the available height — otherwise content-body's `flex: 1` has
+   no parent to stretch into, content-body grows naturally, and then
+   .content's `overflow: hidden` clips anything past the viewport (no
+   scrollbar appears). This was the "scrolling sometimes doesn't work"
+   bug on the decisions page. */
+.content > section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;          /* critical — lets children shrink below content size */
+  overflow: hidden;
+}
+
+/* Records view uses an Alpine <template x-if> that adds a wrapper div
+   between section and content-header/content-body. That wrapper also
+   needs to be a flex column so content-body's scroll works. */
+.record-view-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content-header {
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  flex-shrink: 0;         /* never shrink below min-height */
+  /* Right-side breathing room for the fixed-position user chip is set
+     below in the .user-topbar section (search: "padding-right: 240px"). */
+}
+
+.content-body {
+  padding: 20px 24px;
+  flex: 1;
+  overflow-y: auto;       /* THE scroll container — body scrolls, header stays */
+  overflow-x: hidden;
+}
+
+/* Page title */
+.page-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+  margin: 0;
+}
+
+.page-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Crumb navigation */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+.breadcrumb a {
+  color: #64748b;
+  text-decoration: none;
+  cursor: pointer;
+}
+.breadcrumb a:hover { color: #0f172a; }
+.breadcrumb .sep { color: #cbd5e1; }
+
+/* ── BUTTONS ──────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 12px;
+  transition: all .12s ease;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+  line-height: 1.3;
+}
+
+.btn-primary {
+  background: #1e40af;
+  color: #ffffff;
+  border-color: #1e40af;
+}
+.btn-primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+.btn-primary:disabled {
+  background: #cbd5e1;
+  color: #94a3b8;
+  cursor: not-allowed;
+  border-color: #cbd5e1;
+}
+
+.btn-ghost {
+  background: #ffffff;
+  color: #334155;
+  border-color: #d1d5db;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+.btn-ghost:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: #ffffff;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
+.btn-success {
+  background: #059669;
+  color: #ffffff;
+  border-color: #059669;
+}
+.btn-success:hover:not(:disabled) {
+  background: #047857;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.btn-xs {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.btn-icon {
+  padding: 5px;
+  width: 26px;
+  height: 26px;
+  justify-content: center;
+}
+
+/* ── PILLS ─────────────────────────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+.pill-brand   { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.pill-danger  { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.pill-warn    { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.pill-success { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.pill-info    { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.pill-neutral { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.pill-purple  { background: #faf5ff; color: #6d28d9; border-color: #ddd6fe; }
+
+/* Status pill variants */
+.status-in_progress {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.status-validated {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+.status-ltmc_uploaded {
+  background: #faf5ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
+/* ── CARDS ─────────────────────────────────────────────────── */
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafbfc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+}
+
+.card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.card-body {
+  padding: 14px;
+}
+
+.card-body-flush { padding: 0; }
+
+/* KPI grid (compact, 4 small cards) */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.kpi {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.kpi-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.kpi-sub {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* ── TABLE ─────────────────────────────────────────────────── */
+.table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+
+.table thead th {
+  text-align: left;
+  padding: 8px 12px;
+  background: #fafbfc;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.table tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.table tbody tr:hover {
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.table tbody tr.error-row {
+  background: #fef2f2;
+}
+.table tbody tr.error-row:hover {
+  background: #fee2e2;
+}
+
+.table td {
+  padding: 8px 12px;
+  vertical-align: middle;
+}
+
+.table td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+.table td.center { text-align: center; }
+.table td.right { text-align: right; }
+
+/* Condensed table for error grid */
+.table-condensed thead th,
+.table-condensed td {
+  padding: 5px 8px;
+}
+
+/* ── FORM INPUT ────────────────────────────────────────────── */
+.ff {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  color: #0f172a;
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-size: 12px;
+  transition: all .1s ease;
+  font-family: inherit;
+  width: 100%;
+}
+
+.ff:hover { border-color: #94a3b8; }
+
+.ff:focus {
+  outline: none;
+  border-color: #1e40af;
+  box-shadow: 0 0 0 3px rgba(30,64,175,.1);
+}
+
+.ff.err {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+.ff.err:focus {
+  box-shadow: 0 0 0 3px rgba(220,38,38,.1);
+}
+
+.ff-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+}
+
+/* Field label */
+.field-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #475569;
+  margin-bottom: 3px;
+}
+
+.field-label .mandatory {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* Compact inline field (label + input on one row) */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+/* ── Module selector cards ────────────────────────────────── */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.module-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all .12s ease;
+  position: relative;
+}
+
+.module-card:hover {
+  border-color: #1e40af;
+  box-shadow: 0 2px 8px rgba(30,64,175,.08);
+  transform: translateY(-1px);
+}
+
+.module-card.disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.module-card.disabled:hover {
+  border-color: #e5e7eb;
+  box-shadow: none;
+  transform: none;
+}
+
+.module-card-icon {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1e40af;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 10px;
+}
+
+.module-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.module-card-stats {
+  font-size: 11px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+/* ── DECISION CARD ────────────────────────────────────────── */
+.decision-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid #dc2626;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: all .12s ease;
+}
+.decision-card.warn { border-left-color: #d97706; }
+.decision-card.resolved { opacity: .5; }
+.decision-card:hover {
+  border-color: #94a3b8;
+}
+
+.decision-card-body {
+  padding: 14px 16px;
+}
+
+.decision-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.decision-card-meta {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.decision-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-top: 2px;
+}
+
+.decision-card-count {
+  font-size: 22px;
+  font-weight: 700;
+  color: #dc2626;
+  letter-spacing: -0.02em;
+  margin-left: auto;
+}
+
+.decision-card-sample {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: #d97706;
+  word-break: break-all;
+}
+
+.decision-card-actions {
+  padding: 10px 16px;
+  border-top: 1px solid #f1f5f9;
+  background: #fafbfc;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── PROGRESS BAR ─────────────────────────────────────────── */
+.progress-track {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: #1e40af;
+  transition: width .3s cubic-bezier(.4,0,.2,1);
+}
+.progress-fill.success { background: #059669; }
+
+/* ── MODAL ────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,.5);
+  backdrop-filter: blur(3px);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 24px 64px rgba(15,23,42,.2);
+  max-width: 540px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-wide { max-width: 720px; }
+
+.modal-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  padding: 12px 18px;
+  border-top: 1px solid #e5e7eb;
+  background: #fafbfc;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── LOGIN ─────────────────────────────────────────────────── */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0b1220 0%, #1e293b 100%);
+  padding: 16px;
+}
+
+.login-card {
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  width: 380px;
+  overflow: hidden;
+}
+
+.login-header {
+  padding: 24px 24px 16px;
+  text-align: center;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.login-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.login-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.login-body {
+  padding: 0 24px 24px;
+}
+
+.demo-creds {
+  margin-top: 16px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.demo-creds table {
+  width: 100%;
+  font-size: 11px;
+}
+.demo-creds td {
+  padding: 2px 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+.demo-creds td:first-child { color: #0f172a; font-weight: 600; }
+.demo-creds td:last-child { color: #64748b; text-align: right; }
+
+/* ── DROPZONE ──────────────────────────────────────────────── */
+.dropzone {
+  background: #ffffff;
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 32px 20px;
+  text-align: center;
+  transition: all .15s ease;
+}
+
+.dropzone.drag-over {
+  border-color: #1e40af;
+  background: #eff6ff;
+}
+
+/* ── TOAST ─────────────────────────────────────────────────── */
+/* Top-right, below the fixed user chip (which sits at top:10px, ~36px tall).
+   Putting toasts at the top means they don't compete with content actions
+   or the old bottom-action-bar space. Stacks downward as more arrive. */
+.toast {
+  position: fixed;
+  top: 60px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast-item {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid;
+  border-radius: 5px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.1);
+  min-width: 280px;
+  max-width: 400px;
+  pointer-events: auto;
+  font-size: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.toast-success { border-left-color: #059669; }
+.toast-error   { border-left-color: #dc2626; }
+.toast-info    { border-left-color: #1e40af; }
+.toast-warn    { border-left-color: #d97706; }
+
+/* ── ERROR-FIRST EDITOR ───────────────────────────────────── */
+.errors-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.errors-banner-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #b91c1c;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+
+.error-item {
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.error-item-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.error-item-msg {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.error-item-input {
+  background: #ffffff;
+  border: 1px solid #f87171;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-family: 'JetBrains Mono', monospace;
+  width: 100%;
+}
+
+.error-item-input:focus {
+  outline: none;
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220,38,38,.1);
+}
+
+/* ── RECORD-EDITOR LAYOUT ─────────────────────────────────── */
+.record-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+}
+
+.record-sidebar {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 14px;
+  position: sticky;
+  top: 0;                          /* sticks to top of content-body scroll area */
+  align-self: start;               /* grid: don't stretch to row height */
+  max-height: calc(100vh - 100px); /* leave room for content-header + margins */
+  overflow-y: auto;
+}
+
+.field-pair {
+  margin-bottom: 10px;
+}
+
+.field-pair-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+
+/* Collapsible */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #fafbfc;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+  user-select: none;
+}
+
+.collapsible-header:hover { background: #f1f5f9; }
+
+/* Animations */
+.animate-fade-in { animation: fadeIn .25s ease; }
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.animate-slide-up { animation: slideUp .3s cubic-bezier(.4,0,.2,1); }
+@keyframes slideUp {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ── TEXT COLORS ───────────────────────────────────────────── */
+.text-ink       { color: #0f172a; }
+.text-ink-2     { color: #334155; }
+.text-muted     { color: #64748b; }
+.text-dim       { color: #94a3b8; }
+.text-danger    { color: #dc2626; }
+.text-success   { color: #059669; }
+.text-warn      { color: #d97706; }
+.text-brand     { color: #1e40af; }
+
+/* ── UTIL ──────────────────────────────────────────────────── */
+.divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 12px 0;
+}
+
+.divider-v {
+  width: 1px;
+  background: #e5e7eb;
+  height: 20px;
+  margin: 0 6px;
+}
+
+/* No-select */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Focus outline */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #1e40af;
+  outline-offset: 1px;
+}
+
+/* ── KEY SHORTCUT ──────────────────────────────────────────── */
+kbd {
+  font-family: 'JetBrains Mono', monospace;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  color: #334155;
+}
+
+/* ── LOADING STATES ───────────────────────────────────────── */
+/* Top-of-page progress bar — indeterminate, appears during any fetch */
+.top-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  z-index: 9999;
+  pointer-events: none;
+  overflow: hidden;
+}
+.top-loader::after {
+  content: "";
+  display: block;
+  position: absolute;
+  left: -40%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #1e40af, transparent);
+  animation: top-loader-slide 1.1s ease-in-out infinite;
+}
+@keyframes top-loader-slide {
+  0%   { left: -40%; }
+  100% { left: 100%; }
+}
+
+/* Inline spinner — used inside buttons + cells */
+.inline-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  opacity: 0.75;
+}
+.inline-spinner-sm {
+  width: 10px;
+  height: 10px;
+  border-width: 1.5px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Button in busy state */
+.btn-busy {
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+/* Row in busy state (being opened) */
+.row-busy {
+  opacity: 0.55;
+  pointer-events: none;
+  background: #eff6ff !important;
+}
+
+/* Cursor hint during global loading */
+body.is-loading, body.is-loading button, body.is-loading a {
+  cursor: progress !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HEADER ACTIONS (top-right of content header)
+   Primary CTAs live here — Gmail/GitHub/Notion pattern.
+   Always visible above the fold, consistent position across views.
+   ═══════════════════════════════════════════════════════════ */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.btn-lg {
+  padding: 9px 18px !important;
+  font-size: 14px !important;
+  font-weight: 600;
+}
+.pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 6px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MM DATA-SHAPE WARNINGS BANNER (v35)
+   Sits at the top of the Dashboard for MM sessions only. Calls
+   out wrong-file-pair uploads, multi-plant fanout, and true
+   duplicates. Styled as a mellow amber info card — serious enough
+   to be noticed but not as loud as the pending-decisions callout
+   (which is a red/amber action CTA directly below).
+   ═══════════════════════════════════════════════════════════ */
+.mm-warnings-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+.mm-warnings-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #92400e;
+  margin-bottom: 6px;
+}
+.mm-warnings-list {
+  margin: 0;
+  padding-left: 22px;
+  list-style: disc;
+  color: #78350f;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.mm-warnings-list li {
+  margin-bottom: 4px;
+}
+.mm-warnings-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* Compact horizontal stats strip shown under the MM warnings.
+   Inline flex row; each stat is a labeled number. Mirrors the
+   "meta row" pattern from Notion / Linear headers. */
+.mm-stats-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 22px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 14px;
+}
+.mm-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.mm-stat-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  font-weight: 500;
+}
+.mm-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PENDING-DECISIONS CALLOUT — top of dashboard body.
+   Orange/amber, click anywhere on the card to jump to decisions.
+   Impossible to miss when the page loads.
+   ═══════════════════════════════════════════════════════════ */
+.pending-callout {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.05s;
+}
+.pending-callout:hover {
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+.pending-callout:active {
+  transform: translateY(1px);
+}
+.pending-callout-icon {
+  width: 36px;
+  height: 36px;
+  background: #f59e0b;
+  color: #ffffff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.pending-callout-body {
+  flex: 1;
+  min-width: 0;
+}
+.pending-callout-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #78350f;
+  line-height: 1.2;
+}
+.pending-callout-sub {
+  font-size: 12px;
+  color: #92400e;
+  margin-top: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   100% ZOOM FIX — tighter paddings, responsive KPI row
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 1400px) {
+  /* NB: right-side reservation (240px → 80px on <1100px) is set by the
+     .user-topbar CSS block below — don't override it here. */
+  .content-header { padding-top: 10px; padding-bottom: 10px; padding-left: 18px; min-height: 52px; }
+  .content-body { padding: 16px 18px; }
+  .page-title { font-size: 17px; }
+  .kpi { padding: 10px 12px; }
+  .kpi-value { font-size: 22px; }
+}
+@media (max-width: 1200px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .header-actions { flex-wrap: wrap; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SMART EDITORS (record editor error banner)
+   Each error has a tight row of controls: input + quick-actions.
+   ═══════════════════════════════════════════════════════════ */
+.smart-editor {
+  min-width: 0;
+}
+.smart-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.smart-editor-row .error-item-input {
+  flex: 1;
+  min-width: 180px;
+}
+.smart-editor-row .btn-xs {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* Input type=date styling */
+input[type="date"] {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+}
+
+/* Best-in-cluster row subtle highlight */
+.row-best {
+  background: #ecfdf5 !important;
+  box-shadow: inset 3px 0 0 #10b981;
+}
+.row-best td {
+  background: transparent !important;
+}
+.pill.pill-info {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOP-RIGHT USER CHIP + DROPDOWN
+   Always-visible identity in the top-right corner (Gmail/GitHub
+   pattern). Fixed position so it survives page scroll and is
+   accessible from any view.
+   ═══════════════════════════════════════════════════════════ */
+.user-topbar {
+  position: fixed;
+  top: 10px;
+  right: 16px;
+  z-index: 45;
+}
+/* When env banner is showing, shift topbar down so chip doesn't
+   overlap the banner. Banner is 36px tall, so 46px = 36 + 10 margin. */
+body.env-nonprod .user-topbar {
+  top: 46px;
+}
+.user-topbar-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 4px 10px 4px 4px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15,23,42,.06);
+  transition: all 0.15s;
+}
+.user-topbar-chip:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(15,23,42,.10);
+}
+.user-avatar-sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+.user-topbar-meta {
+  min-width: 0;
+  text-align: left;
+  line-height: 1.15;
+}
+.user-topbar-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-topbar-role {
+  font-size: 10px;
+  color: #64748b;
+  text-transform: capitalize;
+}
+.user-topbar-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15,23,42,.12);
+  overflow: hidden;
+}
+.user-topbar-menu-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+}
+.user-topbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  color: #0f172a;
+  cursor: pointer;
+}
+.user-topbar-menu-item:hover {
+  background: #f4f5f7;
+}
+
+/* Give content-header right side some breathing room so the user chip
+   (fixed-position, top-right of viewport) doesn't visually collide with
+   the header actions. Actions sit in the header flex; chip sits above.
+   Chip width = avatar(26) + gap(8) + name(max 140) + gap + role + chevron
+   + chip padding = ~220px. Reserve 240px so nothing touches. */
+.content-header {
+  padding-right: 240px;
+}
+/* On narrow screens the chip collapses (name hidden). Reserve enough
+   for the compact chip (avatar + chevron ≈ 60px) plus safety gap. */
+@media (max-width: 1100px) {
+  .content-header { padding-right: 80px; }
+  .user-topbar-meta { display: none; }
+  .user-topbar-chip { padding: 4px; }
+}
+
+/* ── Clickable table rows (Changes Summary, Audit Trail) ─── */
+.table-clickable-rows tbody tr.clickable,
+tbody tr.clickable {
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+.table-clickable-rows tbody tr.clickable:hover,
+tbody tr.clickable:hover {
+  background: #eff6ff;
+  box-shadow: inset 2px 0 0 #3b82f6;
+}
+tbody tr.not-clickable {
+  cursor: default;
+  opacity: 0.85;
+}
+
+/* ── FLOW BANNER — sits between content-header and content-body during
+   Fix Individually flows. Keeps the primary "Save & Next" CTA always
+   in the same spot so users don't hunt for it between rows. */
+.flow-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 24px;
+  background: linear-gradient(to right, #eef2ff, #f0f9ff);
+  border-bottom: 1px solid #c7d2fe;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.flow-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.flow-banner-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #4338ca;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.flow-banner-rule {
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+.flow-banner-progress {
+  color: #475569;
+  font-size: 12px;
+}
+.flow-banner-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── KDS SUGGESTION ROW — appears in error-item editors when the
+   validator knows the canonical value from the KDS reference
+   (e.g. Incoterms CIF → "Costs Insurance and Freight"). ── */
+.kds-suggest-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+}
+.kds-suggest-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #581c87;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.kds-suggest-value {
+  color: #1e293b;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── CHAR-LEVEL DIAGNOSTICS (PAN / GSTIN)
+   Shows the user's value character-by-character with bad positions
+   highlighted in red so they see exactly which character is wrong,
+   not just "invalid format". ───────────────────────────────────── */
+.char-diag {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+}
+.char-diag-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #991b1b;
+  margin-bottom: 6px;
+}
+.char-diag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.char-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  padding: 3px 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #ffffff;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  cursor: help;
+  transition: transform 0.08s ease;
+}
+.char-cell:hover {
+  transform: translateY(-1px);
+}
+.char-cell.char-bad {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #991b1b;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px #dc2626 inset;
+}
+/* Missing position — shown for short values (e.g. 14-char GSTIN that
+   should have 15 chars). Dashed border + muted background to read as
+   "empty slot that should be filled", not the same red as a wrong char. */
+.char-cell.char-missing {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  border-style: dashed;
+  color: #78350f;
+  font-weight: 700;
+}
+.char-cell.char-missing .char-pos { color: #92400e; }
+.char-cell.char-ok {
+  color: #475569;
+}
+.char-glyph {
+  font-size: 14px;
+  line-height: 1;
+}
+.char-pos {
+  font-size: 9px;
+  color: #94a3b8;
+  margin-top: 2px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.char-cell.char-bad .char-pos { color: #b91c1c; }
+.char-diag-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.char-diag-chip {
+  font-size: 10.5px;
+  padding: 2px 6px;
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  border-radius: 3px;
+  color: #7f1d1d;
+}
+.char-got {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 700;
+  color: #dc2626;
+}
+.char-exp {
+  font-weight: 600;
+  color: #065f46;
+}
+.char-diag-length {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  font-size: 11.5px;
+  color: #991b1b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── CHAR-LEVEL DIAGNOSTICS for PAN / GSTIN errors ─────────────
+   Renders the value character-by-character so the user sees exactly
+   which positions failed validation. Bad positions get a red border
+   and background; others are neutral. Tooltip explains what was
+   expected at each bad position. */
+.char-diag {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.char-diag-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: #7f1d1d;
+  margin-bottom: 6px;
+}
+.char-diag-row {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.char-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 22px;
+  padding: 4px 2px;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1;
+}
+.char-cell.char-ok {
+  color: #334155;
+  border-color: #e5e7eb;
+}
+.char-cell.char-bad {
+  color: #ffffff;
+  background: #dc2626;
+  border-color: #991b1b;
+  font-weight: 700;
+  animation: char-pulse 1.6s ease-in-out infinite;
+}
+@keyframes char-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  50%      { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.0); }
+}
+.char-glyph {
+  font-weight: inherit;
+}
+.char-pos {
+  font-size: 9px;
+  margin-top: 2px;
+  font-weight: 600;
+  color: inherit;
+  opacity: 0.8;
+}
+.char-cell.char-ok .char-pos { color: #94a3b8; }
+.char-diag-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.char-diag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  font-size: 10px;
+  color: #7f1d1d;
+}
+.char-diag-chip .char-got {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 700;
+  color: #dc2626;
+}
+.char-diag-chip .char-exp {
+  font-weight: 600;
+  color: #166534;
+}
+.char-diag-length {
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #7f1d1d;
+}
+
+/* ── RELATED FIELDS — small context pills next to an error editor.
+   Shows read-only values of fields the user needs to see to make
+   an informed fix (e.g. DL Number when fixing DL Expiry). ── */
+.related-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.related-field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.related-field-label {
+  color: #64748b;
+  font-weight: 500;
+}
+.related-field-value {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+/* ── ENVIRONMENT BANNER — shows at top of page when env != production.
+   Distinct yellow-orange bar that's impossible to miss but still thin
+   enough not to eat real screen space. Keeps layout stable by
+   reserving its height via body class. ── */
+.env-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+.env-banner-staging {
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
+  color: #1f2937;
+  border-bottom: 1px solid #d97706;
+}
+.env-banner-other {
+  background: #dc2626;
+  color: white;
+  border-bottom: 1px solid #991b1b;
+}
+.env-banner-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.env-banner-text {
+  flex: 1;
+}
+.env-banner-dismiss {
+  background: rgba(0, 0, 0, 0.15);
+  color: inherit;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.env-banner-dismiss:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Push the whole page down so the banner doesn't overlap the app chrome.
+   Applied via JS to body when env is non-prod. */
+body.env-nonprod {
+  padding-top: 36px;
+}
+
+/* Subtle tint so the whole page feels "different" — peripheral vision
+   picks this up even when banner is dismissed. Very light; doesn't
+   hurt readability. */
+body.env-nonprod {
+  background-image: linear-gradient(rgba(251, 191, 36, 0.03),
+                                     rgba(251, 191, 36, 0.03));
+}
+
+/* ─── UNIFIED SUGGESTION PALETTE (v31) ──────────────────────────────
+   Purple = suggestion (system recommends). Used by:
+     - Suggestion chip under each Group & Replace row
+     - Single per-row "Apply" button in individual record editor
+     - "Apply KDS to all" top button in Group & Replace
+     - Bulk Change modal suggestion row
+   One style, one colour. If another module wants to show a
+   suggestion, it uses .suggestion-chip or .btn-purple — not a
+   bespoke inline hex. */
+
+/* Clickable chip that fills an input with a suggestion value when
+   clicked. Used per-row in Group & Replace. Purple so it's clearly
+   a suggestion (not a confirmed value, not an error). */
+.suggestion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  color: #7e22ce;
+  font-size: 11px;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, transform 80ms;
+  font-family: inherit;
+}
+.suggestion-chip:hover {
+  background: #f3e8ff;
+  border-color: #d8b4fe;
+}
+.suggestion-chip:active {
+  transform: translateY(1px);
+}
+.suggestion-chip-sep {
+  color: #c084fc;
+  flex-shrink: 0;
+}
+.suggestion-chip-desc {
+  color: #6b21a8;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Purple button variant. Same shape as .btn-primary but purple fill.
+   Used for "Apply KDS to all" and any bulk suggestion action. */
+.btn-purple {
+  background: #7e22ce;
+  color: #ffffff;
+  border: 1px solid #7e22ce;
+}
+.btn-purple:hover:not(:disabled) {
+  background: #6b21a8;
+  border-color: #6b21a8;
+}
+.btn-purple:disabled {
+  background: #e9d5ff;
+  border-color: #e9d5ff;
+  color: #ffffff;
+  cursor: not-allowed;
+}
+
+/* ─── MM UPLOAD SLOTS (v32) ────────────────────────────────────────
+   Three labelled slots for the Main / Alt UoM / Long Text files.
+   Status-tinted border tells the user at a glance which slots still
+   need a file and which are ready.
+   States: empty (grey), checking (grey spinner), ok (green), bad (red). */
+.mm-slot {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  transition: border-color 150ms, background 150ms;
+}
+.mm-slot.ok {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.mm-slot.bad {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+.mm-slot.checking {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.mm-slot-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 10px 12px 6px 12px;
+  gap: 10px;
+}
+.mm-slot-title {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 13px;
+}
+.mm-slot-subtitle {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+.mm-slot-status {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.mm-slot-status.empty {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+.mm-slot-status.checking {
+  background: #f1f5f9;
+  color: #475569;
+}
+.mm-slot-status.ok {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+.mm-slot-status.bad {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.mm-slot-body {
+  padding: 6px 12px 12px 12px;
+}
+.mm-slot-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mm-slot-filename {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+/* Hint shown under a bad slot — actionable fix suggestion, not just
+   "what went wrong". Amber callout so it reads as "here's what to do"
+   (actionable) vs the red reason text above it (diagnostic). Inherits
+   line-height from .mm-slot-detail's column gap. */
+.mm-slot-hint {
+  padding: 6px 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  color: #92400e;
+  line-height: 1.4;
+}

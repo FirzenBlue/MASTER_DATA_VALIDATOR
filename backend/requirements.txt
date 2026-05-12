@@ -1,0 +1,13 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.9
+lxml>=5.0.0
+openpyxl>=3.1.0
+# Fast Rust-backed xlsx reader. ~14× faster than openpyxl on large
+# files (49s → 3.5s on a 12 MB / 24k-row Healthium FG main file).
+# Optional dependency: mm_loader.py falls back to openpyxl if missing,
+# but we include it in requirements so production gets the fast path.
+python-calamine>=0.2.0
+pydantic>=2.5.0
+psycopg[binary]>=3.1.0
+psutil>=5.9.0
