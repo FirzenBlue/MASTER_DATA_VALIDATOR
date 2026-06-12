@@ -35,7 +35,8 @@ from services.mm_merger import merge as mm_merge
 from services.mm_validator import validate_mm
 from mm_routes import router as mm_router, _get_mm_catalogs
 from pp_routes import router as pp_router
-
+# from grievance_routes import router as grievance_router
+from chatbot_routes import router as chatbot_router
 
 app = FastAPI(title="Master Data Validator", version="0.3")
 
@@ -46,6 +47,9 @@ app.include_router(mm_router)
 # PP module routes — BOM and Routing upload, format-check, manifest+chunk
 # export. See backend/pp_routes.py.
 app.include_router(pp_router)
+
+#app.include_router(grievance_router)
+app.include_router(chatbot_router)
 
 
 @app.on_event("startup")

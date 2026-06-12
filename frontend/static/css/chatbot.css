@@ -1,0 +1,222 @@
+.mdv-chatbot-button {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  width: 72px;
+  height: 72px;
+  border: none;
+  border-radius: 50%;
+  background: #123b7a;
+  color: white;
+  font-size: 28px;
+  cursor: pointer;
+  box-shadow: 0 14px 35px rgba(18, 59, 122, 0.35);
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.mdv-chatbot-window {
+  position: fixed;
+  right: 28px;
+  bottom: 112px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  height: 620px;
+  max-height: calc(100vh - 140px);
+  background: white;
+  border: 2px solid #123b7a;
+  border-radius: 20px;
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+  z-index: 9999;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.22);
+}
+
+.mdv-chatbot-window.open {
+  display: flex;
+}
+
+.mdv-chatbot-header {
+  background: #173f7f;
+  color: white;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mdv-chatbot-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: white;
+}
+
+.mdv-chatbot-title {
+  flex: 1;
+}
+
+.mdv-chatbot-title strong {
+  display: block;
+  font-size: 17px;
+}
+
+.mdv-chatbot-title span {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.mdv-chatbot-reload {
+  background: transparent;
+  border: none;
+  color: white; 
+  font-size: 18px; 
+  font-weight: bold;
+  cursor: pointer;
+  margin-right: 15px; 
+  padding: 0;
+}
+
+.mdv-chatbot-reload:hover {
+  opacity: 0.7;
+}
+
+.mdv-chatbot-close {
+  border: none;
+  background: transparent;
+  color: white;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.mdv-chatbot-reload,
+.mdv-chatbot-close {
+  background-color: white;
+  border: none;
+  border-radius: 50%; 
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  
+  transition: background-color 0.2s ease-in-out;
+}
+.mdv-chatbot-reload {
+  margin-right: 8px;
+}
+
+.mdv-chatbot-reload:hover,
+.mdv-chatbot-close:hover {
+  background-color: #E3F2FD; 
+}
+
+.mdv-chatbot-body {
+  flex: 1;
+  padding: 18px;
+  overflow-y: auto;
+  background: #f8fafc;
+}
+
+.mdv-message {
+  max-width: 85%;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.mdv-message.bot {
+  background: white;
+  color: #1f2937;
+  border-top-left-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+.mdv-message.user {
+  margin-left: auto;
+  background: #173f7f;
+  color: white;
+  border-top-right-radius: 4px;
+}
+
+.mdv-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+
+.mdv-option-btn {
+  min-height: 54px;
+  border: 2px solid #173f7f;
+  border-radius: 12px;
+  background: white;
+  color: #111827;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mdv-option-btn:hover {
+  background: #eef4ff;
+}
+
+.mdv-chatbot-footer {
+  padding: 14px;
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid #e5e7eb;
+  background: white;
+}
+
+.mdv-chatbot-input {
+  flex: 1;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 10px 14px;
+  outline: none;
+}
+
+.mdv-chatbot-send {
+  border: none;
+  background: #E3F2FD;
+  color: white;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;  
+  height: 36px;
+
+  transition: background-color 0.2s ease-in-out;
+}
+.mdv-chatbot-send:hover {
+  background-color: #BBDEFB; 
+}
+
+@media (max-width: 520px) {
+  .mdv-chatbot-window {
+    right: 12px;
+    left: 12px;
+    bottom: 96px;
+    width: auto;
+    height: 580px;
+  }
+
+  .mdv-options {
+    grid-template-columns: 1fr;
+  }
+}
