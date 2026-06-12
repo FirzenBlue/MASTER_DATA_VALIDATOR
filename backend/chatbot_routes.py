@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from services.groq_service import ask_groq
@@ -12,7 +12,7 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/message")
-def chatbot_message(payload: ChatRequest):
+def chatbot_message(payload: ChatRequest, request: Request):
     message = payload.message.strip()
 
     if not message:
@@ -23,7 +23,7 @@ def chatbot_message(payload: ChatRequest):
     state = _get_session_state(session_token, create=True)
 
     history = state.setdefault("chat_history", [])
-    
+
     try:
         reply = ask_groq(message,history)
 

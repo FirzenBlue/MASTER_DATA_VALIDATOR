@@ -190,6 +190,7 @@ def _get_session_state(user_token: str, create: bool = False) -> dict:
             "audit_log": [],
             "resolved_decisions": set(),
             "accepted_errors": set(),
+            "chat_history":[], # initializing chat history 
             "mm_bundle": None,
             "pp_bundle": None,
             "last_accessed": _time.time(),
