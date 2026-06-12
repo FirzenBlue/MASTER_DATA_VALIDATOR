@@ -6,7 +6,7 @@
 
     wrapper.innerHTML = `
       <button class="mdv-chatbot-button" id="mdvChatbotButton">
-      <img src="/static/assets/bot_11306159.png" alt="Chat" style="width: 32px; height: 32px;" />
+      <img src="/static/assets/bot_11306159.png" alt="Chat" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" />
       </button>
 
       <div class="mdv-chatbot-window" id="mdvChatbotWindow">

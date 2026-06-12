@@ -17,6 +17,8 @@
   align-items: center;
   justify-content: center;
   padding: 0;
+
+  overflow: hidden;
 }
 
 .mdv-chatbot-window {
@@ -135,18 +137,21 @@
   line-height: 1.45;
 }
 
+
 .mdv-message.bot {
   background: white;
-  color: #1f2937;
-  border-top-left-radius: 4px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
+
+  border-radius: 14px 14px 14px 2px; 
 }
 
 .mdv-message.user {
   margin-left: auto;
-  background: #173f7f;
+  background: #123b7a;
   color: white;
-  border-top-right-radius: 4px;
+  border-radius: 14px 14px 2px 14px; 
+  box-shadow: 0 2px 4px rgba(23, 63, 127, 0.2);
 }
 
 .mdv-options {
@@ -245,5 +250,4 @@
   font-weight: 700;
   color: inherit;
 }
-
 

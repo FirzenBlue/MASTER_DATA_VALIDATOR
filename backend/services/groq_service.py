@@ -16,7 +16,7 @@ def load_module_context() -> str:
     if KNOWLEDGE_FILE.exists():
         return KNOWLEDGE_FILE.read_text(encoding="utf-8")
 
-    return "You are an SAP assistant. Answer questions about SAP MM and PP clearly."
+    return "You are an SAP assistant. Answer questions about SAP SD, SAP MM and PP clearly."
 
 def load_kds_context() -> str:
     kds_content = ""
@@ -62,7 +62,7 @@ KDS Reference data:
 Answer style:
 - Keep answers simple,concise but informative.
 - Use short paragraphs or bullet points when helpful.
-- Focus mainly on SAP MM and SAP PP.
+- Focus mainly on SAP MM, SAP PP, and SAP SD (Sales & Distribution).
 - If the question is unclear, ask only one clarification question.
 - Do not say you can access the company's SAP system.
 - Do not collect personal data.
