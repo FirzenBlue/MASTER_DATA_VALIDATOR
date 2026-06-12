@@ -80,8 +80,13 @@
     const message = document.createElement("div");
 
     message.className = `mdv-message ${sender}`;
-    message.textContent = text;
 
+    if (sender === "bot" && typeof marked !== 'undefined') {
+      message.innerHTML = marked.parse(text);
+    }
+    else{
+      message.textContent = text;
+    }
     body.appendChild(message);
     body.scrollTop = body.scrollHeight;
   }

@@ -220,3 +220,30 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* formatting inside the chat bubbles */
+.mdv-message p {
+  margin: 0 0 10px 0; 
+}
+
+.mdv-message p:last-child {
+  margin-bottom: 0; 
+}
+
+.mdv-message ul, 
+.mdv-message ol {
+  margin: 8px 0 8px 0;
+  padding-left: 24px; 
+}
+
+.mdv-message li {
+  margin-bottom: 4px; 
+}
+
+.mdv-message strong {
+  font-weight: 700;
+  color: inherit;
+}
+
+
